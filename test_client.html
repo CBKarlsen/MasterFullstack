@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        #log { background: #f0f0f0; padding: 10px; height: 300px; overflow-y: scroll; border: 1px solid #ccc; }
+        .data-point { font-family: monospace; font-size: 12px; border-bottom: 1px solid #ddd; }
+    </style>
+</head>
+<body>
+    <h2>🚀 API Live Stream Test</h2>
+    <button onclick="connect()">Connect & Start Simulation</button>
+    <div id="status">Status: Disconnected</div>
+    <h3>Incoming Data:</h3>
+    <div id="log"></div>
+
+    <script>
+        function connect() {
+            // Connect to your local FastAPI server
+            const ws = new WebSocket("ws://127.0.0.1:8000/ws/simulate");
+            
+            ws.onopen = function() {
+                document.getElementById("status").innerText = "Status: Connected!";
+                document.getElementById("status").style.color = "green";
+            };
+
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                const log = document.getElementById("log");
+                
+                // Create a pretty line of text
+                const line = document.createElement("div");
+                line.className = "data-point";
+                
+                if(data.type === "status") {
+                    line.style.fontWeight = "bold";
+                    line.style.color = "blue";
+                    line.innerText = `[SYSTEM] ${data.message}`;
+                } else {
+                    line.innerText = `Time: ${data.time.toFixed(2)}s | Slope: ${data.spectral_slope.toFixed(2)} | Traffic: ${data.traffic_light}`;
+                }
+
+                log.prepend(line); // Add new data to the top
+            };
+
+            ws.onclose = function() {
+                document.getElementById("status").innerText = "Status: Disconnected";
+                document.getElementById("status").style.color = "red";
+            };
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+# Core web framework
+fastapi
+uvicorn[standard]
+websockets
+python-multipart  # For file uploads
+
+# Data processing
+numpy
+pandas
+openpyxl  # Excel file support
+
+# Machine learning - core
+scikit-learn
+joblib
+
+# Optional: Deep learning frameworks
+# Uncomment these if you need PyTorch or TensorFlow support
+# torch
+# tensorflow
+
+# Utilities
+pydantic>=2.0  # Data validation (used by FastAPI)
