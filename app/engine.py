@@ -1,18 +1,19 @@
 # engine.py
 """
-Simulation Engine - Orchestrates data streaming and detection.
+Simulation engine that orchestrates the detection loop.
 
-Handles:
-- Reading data from files
-- Running the detection pipeline
-- Streaming results via WebSocket
-- Managing simulation speed
+CHANGES:
+- Passes sigma to CloggingDetector
+- Forwards fft_threshold and static_threshold in every payload
+- Handles incoming sigma change messages from WebSocket client
+- Forwards current_sigma so frontend stays in sync
 """
 
 import asyncio
 import os
 from typing import Optional, Dict, Any
 import numpy as np
+import traceback
 
 from .backend import CloggingDetector
 from .dataloader import DataStreamer
@@ -21,40 +22,33 @@ from .dataloader import DataStreamer
 class SimulationEngine:
     """
     Orchestrates the simulation loop for real-time clogging detection.
-
-    Reads data from files, runs detection algorithms, and streams
-    results to connected WebSocket clients.
     """
 
-    def __init__(self, filepath: str, speed_delay: float = 0.05):
-        """
-        Initialize the simulation engine.
-
-        Args:
-            filepath: Path to data file (CSV or Excel) or directory.
-            speed_delay: Seconds between samples (0.05 = 20Hz simulation).
-        """
+    def __init__(self, filepath: str, speed_delay: float = 0.1, sigma: float = 3.0):
         self.filepath = filepath
         self.delay = speed_delay
         self.running = False
+        self.detector = CloggingDetector(sigma=sigma)
+        self._frame_count = 0
 
-        # Initialize detector
-        self.detector = CloggingDetector()
-
-        # Initialize data streamer
         try:
             self.streamer = DataStreamer(filepath).stream()
             self.valid = True
         except Exception as e:
-            print(f"Error loading file: {e}")
+            print(f"Error initializing data streamer: {e}")
             self.valid = False
+
+    def update_sigma(self, new_sigma: float) -> Dict[str, float]:
+        """
+        Update sigma on the detector and return new thresholds.
+
+        Call this when the frontend sends a sigma change request.
+        """
+        return self.detector.set_sigma(new_sigma)
 
     async def run_simulation(self, websocket) -> None:
         """
         Main simulation loop. Streams detection results to WebSocket.
-
-        Args:
-            websocket: WebSocket connection to stream data to.
         """
         if not self.valid:
             await websocket.send_json({"error": "Invalid file path"})
@@ -63,7 +57,6 @@ class SimulationEngine:
         self.running = True
         print(f"Starting simulation for {self.filepath}")
 
-        # Send initial status
         await websocket.send_json({
             "type": "status",
             "message": "Calibrating..."
@@ -71,30 +64,36 @@ class SimulationEngine:
 
         calibration_buffer = []
         is_calibrating = True
-
-        # Track available columns (sent once)
         columns_sent = False
 
         try:
             while self.running:
-                # 1. Get next data point (now returns dict)
+                # --- Data Fetching ---
                 try:
                     data_point = next(self.streamer)
-                    t = data_point["time"]
-                    flow = data_point["flow"]
-                    p_in = data_point["p_in"]
-                    p_out = data_point["p_out"]
-                    raw_data = data_point.get("raw", {})
-                    available_columns = data_point.get("columns", [])
-                    dP = p_in - p_out
                 except StopIteration:
+                    print("Stream finished (StopIteration)")
                     await websocket.send_json({
                         "type": "status",
                         "message": "Simulation Complete"
                     })
                     break
+                except Exception as e:
+                    print(f"Skipping bad data point: {e}")
+                    await asyncio.sleep(0)
+                    continue
 
-                # Send column metadata once at start
+                # Extract data
+                t = data_point.get("time", 0.0)
+                flow = data_point.get("flow", 0.0)
+                p_in = data_point.get("p_in", 0.0)
+                p_out = data_point.get("p_out", 0.0)
+                raw_data = data_point.get("raw", {})
+                available_columns = data_point.get("columns", [])
+
+                dP = p_in - p_out
+
+                # Send column metadata once
                 if not columns_sent and available_columns:
                     await websocket.send_json({
                         "type": "columns",
@@ -102,109 +101,113 @@ class SimulationEngine:
                     })
                     columns_sent = True
 
-                # 2. Calibration or Processing
                 payload = {}
 
+                # Calibration or Processing
                 if is_calibrating:
                     calibration_buffer.append(dP)
                     if len(calibration_buffer) >= 400:
-                        self.detector.calibrate(calibration_buffer)
-                        is_calibrating = False
-                        await websocket.send_json({
-                            "type": "status",
-                            "message": "Calibration Done"
-                        })
+                        try:
+                            self.detector.calibrate(calibration_buffer)
+                            is_calibrating = False
+                            await websocket.send_json({
+                                "type": "status",
+                                "message": "Calibration Done"
+                            })
+                            # Send initial thresholds after calibration
+                            await websocket.send_json({
+                                "type": "thresholds",
+                                "sigma": self.detector.sigma,
+                                "fft_threshold": self.detector.fft_threshold,
+                                "static_threshold": self.detector.critical_threshold,
+                                "composite_baseline_mean": self.detector.baseline_composite_mean,
+                                "composite_baseline_std": self.detector.baseline_composite_std,
+                            })
+                        except Exception as e:
+                            print(f"Calibration failed: {e}")
+                            calibration_buffer = []
 
-                    # Limited data during calibration
-                    # Include null values for ensemble/models to signal "no data yet"
                     payload = {
                         "type": "data",
                         "time": t,
                         "flow": flow,
                         "pressure_drop": dP,
                         "status": "calibrating",
-                        "calibration_progress": len(calibration_buffer) / 400,
-                        "ensemble_probability": None,  # Signal no data, not 0%
-                        "models": {},
+                        "limit_threshold": self.detector.fft_threshold,
+                        "static_threshold": self.detector.critical_threshold,
+                        "current_sigma": self.detector.sigma,
                         "traffic_light": "gray",
-                        "light_msg": f"Calibrating... {int(len(calibration_buffer) / 400 * 100)}%",
-                        "raw": raw_data  # Include raw data during calibration too
+                        "raw": raw_data
                     }
                 else:
                     # Run detection
-                    results = self.detector.process_sample(dP, t)
+                    try:
+                        results = self.detector.process_sample(dP, t)
+                        if results:
+                            payload = self._build_payload(t, flow, dP, results, raw_data)
+                    except Exception as e:
+                        print(f"Detection Error at t={t}: {e}")
+                        payload = {
+                            "type": "data",
+                            "time": t,
+                            "flow": flow,
+                            "pressure_drop": dP,
+                            "raw": raw_data,
+                            "error": "Calculation Failed"
+                        }
 
-                    if results:
-                        # Build payload with all model results
-                        payload = self._build_payload(t, flow, dP, results, raw_data)
-
-                # 3. Send to client
+                # Send to client
                 if payload:
-                    await websocket.send_json(payload)
+                    try:
+                        self._frame_count += 1
+                        if self._frame_count % 10 == 0:  # Send every 10th frame = 2Hz instead of 20Hz
+                            await websocket.send_json(payload)
+                    except Exception as e:
+                        print(f"WebSocket Send Error: {e}")
+                        break
 
-                # 4. Control simulation speed
                 await asyncio.sleep(self.delay)
 
         except Exception as e:
-            print(f"Simulation Error: {e}")
-            await websocket.send_json({"error": str(e)})
+            print(f"CRITICAL SIMULATION CRASH: {e}")
+            traceback.print_exc()
+            try:
+                await websocket.send_json({"error": f"Server Crash: {str(e)}"})
+            except:
+                pass
 
     def _build_payload(self, time: float, flow: float, pressure_drop: float,
                        results: Dict[str, Any], raw_data: Dict[str, float] = None) -> Dict[str, Any]:
-        """
-        Build the WebSocket payload from detection results.
 
-        Includes all model predictions in a structured format.
-
-        Args:
-            time: Current timestamp.
-            flow: Current flow rate.
-            pressure_drop: Current pressure drop.
-            results: Detection results from CloggingDetector.
-            raw_data: Raw column data from the data file.
-
-        Returns:
-            JSON-serializable payload dict.
-        """
-        # Base measurements
         payload = {
             "type": "data",
             "time": time,
             "flow": flow,
             "pressure_drop": pressure_drop,
 
-            # Legacy fields for backward compatibility
-            "static_score": results.get('static', 0),
+            # Scores
             "composite_score": results.get('composite', 0),
-            "turbulence_score": results.get('turbulence', 0),
+            "static_score": results.get('static', 0),
             "spectral_slope": results.get('spectral_slope', 0),
+            "turbulence_score": results.get('turbulence', 0),
+
+            # Thresholds (sent every frame so frontend stays in sync)
+            "limit_threshold": results.get('fft_threshold', self.detector.fft_threshold),
+            "static_threshold": results.get('static_threshold', self.detector.critical_threshold),
+            "current_sigma": results.get('current_sigma', self.detector.sigma),
+
+            # Traffic light
             "traffic_light": results.get('light_color', 'gray'),
             "light_msg": results.get('status_msg', ''),
-            "ml_probability": results.get('ml_probability', 0),
-            "limit_threshold": self.detector.fft_threshold, 
-            # -----------------------------------------
-            
-            "turbulence_score": results.get('turbulence', 0),
-            "spectral_slope": results.get('spectral_slope', 0),
 
-            # New multi-model fields
+            # Models
             "models": results.get('models', {}),
             "ensemble_probability": results.get('ensemble_probability', 0),
 
-            # Raw column data for physics visualization
+            # Raw sensor data
             "raw": raw_data or {},
         }
-
-        # Optionally include spectrum data (can be large, so controlled)
-        # Uncomment to enable spectrum streaming:
-        # if 'raw_spectrum' in results:
-        #     payload['spectrum'] = {
-        #         'freqs': results['raw_freqs'].tolist(),
-        #         'power': results['raw_spectrum'].tolist()
-        #     }
-
         return payload
 
     def stop(self) -> None:
-        """Stop the simulation loop."""
         self.running = False

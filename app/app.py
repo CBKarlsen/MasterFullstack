@@ -7,6 +7,7 @@ import numpy as np
 from .backend import CloggingDetector
 from .dataloader import DataStreamer
 
+
 class CloggingApp:
     def __init__(self, root):
         self.root = root

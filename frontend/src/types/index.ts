@@ -47,6 +47,9 @@ export interface SimulationData {
   calibration_progress?: number;
   raw?: Record<string, number>;  // Raw column data
   columns?: string[];  // Available column names
+  limit_threshold?: number;
+  static_threshold?: number;
+  current_sigma?: number;
 }
 
 export interface ChartDataPoint {

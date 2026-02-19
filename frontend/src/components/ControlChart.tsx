@@ -36,13 +36,17 @@ const LOG_SAFE_MIN = 0.0001;
 
 // Format time for display (e.g., 1234s -> "1234s" or "20:34" for longer times)
 const formatTime = (seconds: number): string => {
-  if (seconds < 3600) {
+  if (seconds < 60) {
     return `${Math.round(seconds)}s`;
   }
-  // For times over 1 hour, show minutes:seconds
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.round(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, "0")}`;
+  if (seconds < 3600) {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.round(seconds % 60);
+    return `${mins}m${secs.toString().padStart(2, "0")}s`;
+  }
+  const hours = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  return `${hours}h${mins.toString().padStart(2, "0")}m`;
 };
 
 export function ControlChart({
@@ -83,7 +87,9 @@ export function ControlChart({
     let maxVal = Math.max(...chartData.map((d) => d.safeValue));
 
     // Ensure domain includes the threshold line
-    maxVal = Math.max(maxVal, threshold);
+    if (isFinite(threshold)) {
+      maxVal = Math.max(maxVal, threshold);
+    }
 
     let yDomain: [number | string, number | string] = ["auto", "auto"];
 
@@ -241,17 +247,19 @@ export function ControlChart({
             />
 
             {/* The Fixed Backend Threshold */}
-            <ReferenceLine
-              y={threshold}
-              stroke="#FF0000"
-              strokeDasharray="3 3"
-              label={{
-                value: "LIMIT",
-                position: "right",
-                fill: "red",
-                fontSize: 10,
-              }}
-            />
+            {isFinite(threshold) && (
+              <ReferenceLine
+                y={threshold}
+                stroke="#FF8C00"
+                strokeDasharray="6 3"
+                label={{
+                  value: "LIMIT",
+                  position: "right",
+                  fill: "#FF8C00",
+                  fontSize: 10,
+                }}
+              />
+            )}
 
             <Area
               type="monotone"

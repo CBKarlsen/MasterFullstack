@@ -20,6 +20,7 @@ from .engine import SimulationEngine
 from .models import ModelRegistry, get_registry
 from .models.builtin import FFTPhysicsModel
 from .dataloader import DataStreamer
+from .batch import run_batch_analysis, recompute_thresholds
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -349,6 +350,42 @@ def list_data_files():
     # Sort by modified date (newest first)
     items.sort(key=lambda x: x['modified'], reverse=True)
     return items
+@app.post("/api/analyze")
+async def analyze_file(
+    file: str,
+    sigma: float = 3.0,
+    calibration_samples: int = 400,
+):
+    data_path = DATA_DIR / file
+    if not data_path.exists():
+        raise HTTPException(status_code=404, detail=f"File '{file}' not found")
+    try:
+        results = run_batch_analysis(
+            filepath=str(data_path),
+            sigma=sigma,
+            calibration_samples=calibration_samples,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+    if "error" in results:
+        raise HTTPException(status_code=400, detail=results["error"])
+    return results
+
+
+@app.post("/api/analyze/thresholds")
+async def recalculate_thresholds(
+    composite_mean: float,
+    composite_std: float,
+    baseline_std: float,
+    sigma: float,
+):
+    return recompute_thresholds(
+        composite_mean=composite_mean,
+        composite_std=composite_std,
+        baseline_std=baseline_std,
+        sigma=sigma,
+    )
+
 
 
 @app.post("/api/data/upload")
@@ -525,4 +562,10 @@ async def websocket_endpoint(websocket: WebSocket):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=8000,
+        ws_ping_interval=None,  # Disable server-side pings (Vite proxy doesn't relay them)
+        ws_ping_timeout=None,
+    )

@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import type { SimulationData, SimulationConfig } from '../types';
 
 interface UseWebSocketOptions {
@@ -20,9 +20,37 @@ export function useWebSocket(
   const { onMessage } = options;
 
   const wsRef = useRef<WebSocket | null>(null);
+  // Keep a stable ref to onMessage so the WebSocket callbacks never go stale
+  const onMessageRef = useRef(onMessage);
+  useEffect(() => {
+    onMessageRef.current = onMessage;
+  }, [onMessage]);
+
+  // Message buffer: accumulate incoming messages and flush once per animation frame
+  const bufferRef = useRef<SimulationData[]>([]);
+  const rafRef = useRef<number | null>(null);
+
   const [isConnected, setIsConnected] = useState(false);
   const [lastMessage, setLastMessage] = useState<SimulationData | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Flush buffered messages at display refresh rate instead of 20Hz wire rate
+  const scheduleFlush = useCallback(() => {
+    if (rafRef.current !== null) return; // already scheduled
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      const buf = bufferRef.current;
+      if (buf.length === 0) return;
+
+      // Process all buffered messages through the callback
+      for (const msg of buf) {
+        onMessageRef.current?.(msg);
+      }
+      // Only update React state with the latest message
+      setLastMessage(buf[buf.length - 1]);
+      bufferRef.current = [];
+    });
+  }, []);
 
   const startSimulation = useCallback((file: string, speed: number = 1.0) => {
     // Close existing connection if any
@@ -63,8 +91,9 @@ export function useWebSocket(
             return;
           }
 
-          setLastMessage(data);
-          onMessage?.(data);
+          // Buffer the message and schedule a batched flush
+          bufferRef.current.push(data);
+          scheduleFlush();
         } catch (e) {
           console.error('Failed to parse WebSocket message:', e);
         }
@@ -82,7 +111,7 @@ export function useWebSocket(
     } catch (e) {
       setError(`Failed to connect: ${e}`);
     }
-  }, [url, onMessage]);
+  }, [url, scheduleFlush]);
 
   const stopSimulation = useCallback(() => {
     if (wsRef.current) {
@@ -96,6 +125,19 @@ export function useWebSocket(
       wsRef.current = null;
     }
     setIsConnected(false);
+  }, []);
+
+  // Clean up WebSocket and pending animation frame on unmount
+  useEffect(() => {
+    return () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+      }
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
   }, []);
 
   return {

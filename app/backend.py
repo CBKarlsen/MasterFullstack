@@ -7,6 +7,12 @@ This module provides:
 - Physics-based anomaly detection
 - Integration with the model registry for ML predictions
 - Sequence buffering for LSTM/sequence models
+
+CHANGES:
+- fft_threshold is now computed from calibration baseline (sigma-based)
+- sigma_multiplier is configurable at init and via set_sigma()
+- static threshold also uses configurable sigma
+- Thresholds are recalculated when sigma changes
 """
 
 import collections
@@ -29,18 +35,23 @@ class CloggingDetector:
     - Machine learning models (via model registry)
     """
 
-    def __init__(self, fs: float = 20.0, window_sec: float = 10.0):
+    def __init__(self, fs: float = 20.0, window_sec: float = 10.0,
+                 sigma: float = 3.0):
         """
         Initialize the clogging detector.
 
         Args:
             fs: Sampling frequency in Hz.
             window_sec: Analysis window size in seconds.
+            sigma: Number of standard deviations for threshold calculation.
         """
         self.fs = fs
         self.window_size = int(window_sec * fs)  # e.g., 200 samples
         self.buffer = collections.deque(maxlen=self.window_size)
         self.composite_buffer_duration = 15.0
+
+        # Sigma multiplier (configurable)
+        self.sigma = sigma
 
         # Calibration state
         self.is_calibrated = False
@@ -48,9 +59,15 @@ class CloggingDetector:
         self.baseline_std = 0.0
         self.baseline_spectrum = None
 
-        # Thresholds
+        # Baseline composite stats (for sigma-based FFT threshold)
+        self.baseline_composite_mean = 0.0
+        self.baseline_composite_std = 0.0
+        self.baseline_static_mean = 0.0
+        self.baseline_static_std = 0.0
+
+        # Thresholds (computed during calibration)
         self.critical_threshold = 0.0
-        self.fft_threshold = 0.05
+        self.fft_threshold = 0.05  # fallback default
 
         # History for plotting and prediction
         self.trend_history = []
@@ -84,9 +101,51 @@ class CloggingDetector:
                     feature_names=model.metadata.input_features
                 )
 
+    def set_sigma(self, new_sigma: float) -> Dict[str, float]:
+        """
+        Update sigma multiplier and recalculate thresholds.
+
+        Args:
+            new_sigma: New sigma value (e.g. 2.0, 3.0, 5.0).
+
+        Returns:
+            Dict with updated threshold values.
+        """
+        self.sigma = new_sigma
+        if self.is_calibrated:
+            self._recalculate_thresholds()
+        return {
+            'sigma': self.sigma,
+            'fft_threshold': self.fft_threshold,
+            'critical_threshold': self.critical_threshold,
+        }
+
+    def _recalculate_thresholds(self):
+        """Recalculate all thresholds from stored baseline stats + current sigma."""
+        # Static threshold: baseline_mean + sigma * baseline_std of dP
+        self.critical_threshold = self.sigma * self.baseline_std
+
+        # FFT/Composite threshold: baseline composite mean + sigma * composite std
+        if self.baseline_composite_std > 0:
+            self.fft_threshold = (self.baseline_composite_mean
+                                  + self.sigma * self.baseline_composite_std)
+        elif self.baseline_composite_mean > 0:
+            # No variance in baseline — use multiplier of mean
+            self.fft_threshold = self.baseline_composite_mean * (1.0 + self.sigma)
+        else:
+            # No composite data at all — use relative fallback
+            self.fft_threshold = 0.05
+
+        print(f"Thresholds recalculated (σ={self.sigma:.1f}): "
+              f"Static={self.critical_threshold:.5f}, "
+              f"Composite={self.fft_threshold:.5f}")
+
     def calibrate(self, baseline_data: List[float]) -> None:
         """
         Calibrate the detector using baseline (healthy) data.
+
+        Computes baseline statistics for both raw signal and derived
+        composite scores, then sets thresholds based on sigma.
 
         Args:
             baseline_data: List of pressure/signal values during normal operation.
@@ -97,26 +156,58 @@ class CloggingDetector:
         self.baseline_mean = np.mean(baseline_data)
         self.baseline_std = np.std(baseline_data)
 
-        # Static threshold
-        self.critical_threshold = 10.0 * self.baseline_std
-
-        # FFT threshold
-        self.fft_threshold = 0.05
-
-        self.is_calibrated = True
-        print(f"Calibrated! Static Limit: {self.critical_threshold:.5f}, FFT Limit: {self.fft_threshold}")
-
-        # Build baseline spectrum fingerprint
-        spectra_list = []
+        # --- Compute baseline composite scores from calibration windows ---
+        # This is the key fix: we run the same FFT composite calculation on
+        # the calibration data to establish what "normal" composite values
+        # look like, then set the threshold at mean + sigma * std.
+        baseline_composites = []
         window_size = self.window_size
-        step = int(window_size / 2)
+        step = int(window_size / 2)  # 50% overlap
+
+        spectra_list = []
 
         for i in range(0, len(baseline_data) - window_size, step):
-            segment = baseline_data[i: i + window_size]
-            segment = segment * np.hamming(len(segment))
-            power = np.abs(np.fft.rfft(segment)) ** 2
-            spectra_list.append(power)
+            segment = np.array(baseline_data[i: i + window_size])
 
+            # FFT composite (same logic as process_sample)
+            ham_signal = segment * np.hamming(len(segment))
+            fft_power = np.abs(np.fft.rfft(ham_signal)) ** 2
+            freqs = np.fft.rfftfreq(len(ham_signal), 1 / self.fs)
+
+            nyquist = self.fs / 2.0
+            split_freq = min(1.0, nyquist / 4.0)  # Split at 25% of Nyquist
+            split_idx = max(2, np.searchsorted(freqs, split_freq))  # At least 2 bins in low band
+            low = np.sum(fft_power[:split_idx])
+            high = np.sum(fft_power[split_idx:])
+            composite_val = high / low if low > 1e-10 else 0.0
+            baseline_composites.append(composite_val)
+
+            # Also build spectral fingerprint
+            spectra_list.append(fft_power)
+
+        # Store baseline composite statistics
+        if baseline_composites:
+            self.baseline_composite_mean = float(np.mean(baseline_composites))
+            self.baseline_composite_std = float(np.std(baseline_composites))
+        else:
+            self.baseline_composite_mean = 0.0
+            self.baseline_composite_std = 0.0
+
+        # Store baseline static statistics
+        self.baseline_static_mean = 0.0  # deviation from mean is ~0 at baseline
+        self.baseline_static_std = self.baseline_std
+
+        self.is_calibrated = True
+
+        # Calculate thresholds using current sigma
+        self._recalculate_thresholds()
+
+        print(f"Calibrated! Baseline composite: "
+              f"mean={self.baseline_composite_mean:.6f}, "
+              f"std={self.baseline_composite_std:.6f}")
+        print(f"  → fft_threshold (σ={self.sigma}): {self.fft_threshold:.6f}")
+
+        # Build baseline spectrum fingerprint
         if spectra_list:
             self.baseline_spectrum = np.mean(spectra_list, axis=0)
             self.baseline_freqs = np.fft.rfftfreq(window_size, d=1 / self.fs)
@@ -133,11 +224,7 @@ class CloggingDetector:
             time_sec: Current timestamp in seconds.
 
         Returns:
-            Dictionary containing:
-            - Basic measurements (static, composite, turbulence, spectral_slope)
-            - Traffic light status
-            - Model predictions from all active models
-            - Raw spectrum data for visualization
+            Dictionary containing all detection results including thresholds.
         """
         self.buffer.append(pressure_val)
         results = {}
@@ -167,13 +254,15 @@ class CloggingDetector:
 
         # Store raw spectrum for visualization
         mask_vis = freqs > 0
-        results['raw_freqs'] = freqs[mask_vis]
-        results['raw_spectrum'] = fft_power[mask_vis]
+        results['raw_freqs'] = freqs[mask_vis].tolist()
+        results['raw_spectrum'] = fft_power[mask_vis].tolist()
 
         # =====================================================================
         # 3. COMPOSITE METHOD (Spectral Energy Ratio)
         # =====================================================================
-        split_idx = np.searchsorted(freqs, 1.0)
+        nyquist = self.fs / 2.0
+        split_freq = min(1.0, nyquist / 4.0)
+        split_idx = max(2, np.searchsorted(freqs, split_freq))
         low = np.sum(fft_power[:split_idx])
         high = np.sum(fft_power[split_idx:])
         composite_val = high / low if low > 1e-10 else 0.0
@@ -193,7 +282,7 @@ class CloggingDetector:
         # 5. ADVANCED PHYSICS & PREDICTION (Calibrated)
         # =====================================================================
         if self.is_calibrated:
-            # A. Spectral Slope (Physics Indicator)
+            # A. Spectral Slope
             slope_val = self.calculate_spectral_slope(freqs, fft_power)
             results['spectral_slope'] = slope_val
 
@@ -202,10 +291,14 @@ class CloggingDetector:
             results['light_color'] = light_color
             results['status_msg'] = status_msg
 
+            # C. Current thresholds (so frontend always has latest)
+            results['fft_threshold'] = self.fft_threshold
+            results['static_threshold'] = self.critical_threshold
+            results['current_sigma'] = self.sigma
+
             # =====================================================================
             # 6. MULTI-MODEL PREDICTIONS
             # =====================================================================
-            # Prepare feature dict for models
             features = {
                 'static_score': results['static'],
                 'composite_score': results['composite'],
@@ -213,17 +306,11 @@ class CloggingDetector:
                 'spectral_slope': slope_val,
             }
 
-            # Update sequence buffers
             self._sequence_manager.add_features(features)
-
-            # Run all active models
             model_results = self._run_all_models(features)
             results['models'] = model_results
-
-            # Calculate ensemble probability (weighted average)
             results['ensemble_probability'] = self._calculate_ensemble(model_results)
 
-            # Legacy: ML probability for backward compatibility
             if 'fft_physics' in model_results:
                 results['ml_probability'] = model_results['fft_physics'].get('probability', 0.0)
             else:
@@ -236,6 +323,9 @@ class CloggingDetector:
             results['ml_probability'] = 0.0
             results['models'] = {}
             results['ensemble_probability'] = 0.0
+            results['fft_threshold'] = self.fft_threshold
+            results['static_threshold'] = self.critical_threshold
+            results['current_sigma'] = self.sigma
 
         # Store history for trend analysis
         if self.is_calibrated:
@@ -244,23 +334,11 @@ class CloggingDetector:
         return results
 
     def _run_all_models(self, features: Dict[str, float]) -> Dict[str, Dict[str, Any]]:
-        """
-        Run prediction on all active models.
-
-        Handles both single-input and sequence-input models.
-
-        Args:
-            features: Current feature dictionary.
-
-        Returns:
-            Dict mapping model name to prediction results.
-        """
+        """Run prediction on all active models."""
         results = {}
-
         for name, model in self.registry.get_active().items():
             try:
                 if model.metadata.input_type == InputType.SEQUENCE:
-                    # Sequence model - use buffer
                     buffer = self._sequence_manager.get_buffer(name)
                     if buffer and buffer.is_ready():
                         seq_features = {'sequence': buffer.get_sequence()}
@@ -268,7 +346,6 @@ class CloggingDetector:
                         results[name] = result.to_dict()
                         results[name]['buffer_status'] = 'ready'
                     else:
-                        # Not enough data yet
                         fill = buffer.fill_ratio() if buffer else 0.0
                         results[name] = {
                             'probability': 0.0,
@@ -276,73 +353,43 @@ class CloggingDetector:
                             'buffer_status': f'filling ({fill:.0%})'
                         }
                 else:
-                    # Single-input model
                     result = model.predict(features)
                     results[name] = result.to_dict()
-
             except Exception as e:
                 results[name] = {
                     'probability': 0.0,
                     'confidence': 0.0,
                     'error': str(e)
                 }
-
         return results
 
     def _calculate_ensemble(self, model_results: Dict[str, Dict[str, Any]]) -> float:
-        """
-        Calculate weighted ensemble probability from all model predictions.
-
-        Uses confidence-weighted average.
-
-        Args:
-            model_results: Results from all models.
-
-        Returns:
-            Ensemble probability (0.0 - 1.0).
-        """
+        """Calculate weighted ensemble probability from all model predictions."""
         probabilities = []
         weights = []
-
         for name, result in model_results.items():
             prob = result.get('probability', 0.0)
             conf = result.get('confidence', 1.0)
-
             if 'error' not in result and prob > 0:
                 probabilities.append(prob)
                 weights.append(conf)
-
         if not probabilities:
             return 0.0
-
-        # Weighted average
         total_weight = sum(weights)
         if total_weight > 0:
             return sum(p * w for p, w in zip(probabilities, weights)) / total_weight
-        else:
-            return np.mean(probabilities)
+        return np.mean(probabilities)
 
     def calculate_spectral_slope(self, freqs: np.ndarray, power: np.ndarray) -> float:
         """
-        Calculate the spectral decay rate (log-log slope).
+        Calculate spectral decay rate (log-log slope).
 
-        Physics basis:
-        - Healthy Flow: Steep slope (~ -2.5 to -3.0) following Kolmogorov cascade
-        - Clogged Flow: Flat slope (~ -1.0 to -1.5) due to white noise/cavitation
-
-        Args:
-            freqs: Frequency array from FFT.
-            power: Power spectrum array.
-
-        Returns:
-            Spectral slope value.
+        Healthy flow: steep slope (~-2.5 to -3.0), Kolmogorov cascade.
+        Clogged flow: flat slope (~-1.0 to -1.5), white noise/cavitation.
         """
-        # Filter for relevant frequency band (1-50 Hz)
         mask = (freqs > 1.0) & (freqs < 50.0)
-
         if np.sum(mask) < 5:
             return 0.0
-
         try:
             x = np.log10(freqs[mask])
             y = np.log10(power[mask])
@@ -352,21 +399,12 @@ class CloggingDetector:
             return 0.0
 
     def predict_robust(self) -> Optional[tuple]:
-        """
-        Robust linear prediction of time to critical threshold.
-
-        Returns:
-            Tuple of (time_remaining_hours, slope, intercept, r2, is_reliable)
-            or None if not enough data.
-        """
+        """Robust linear prediction of time to critical threshold."""
         if len(self.trend_history) < 500:
             return None
-
         data = list(self.trend_history)
         times = np.array([x[0] for x in data])
         scores = np.array([x[1] for x in data])
-
-        # Smoothing
         window_len = 50
         if len(scores) > window_len:
             scores_smooth = np.convolve(scores, np.ones(window_len) / window_len, mode='valid')
@@ -374,92 +412,56 @@ class CloggingDetector:
         else:
             scores_smooth = scores
             times_smooth = times
-
-        # Linear regression
         X = times_smooth[-1000:].reshape(-1, 1)
         y = scores_smooth[-1000:]
-
         model = LinearRegression()
         model.fit(X, y)
         slope = model.coef_[0]
         r2 = model.score(X, y)
-
-        # Median filter for stability
         self.slope_buffer.append(slope)
         stable_slope = np.median(self.slope_buffer)
-
         if stable_slope <= 0:
             return None
-
         current_val = scores_smooth[-1]
         time_rem_sec = (self.critical_threshold - current_val) / stable_slope
         time_rem_hours = time_rem_sec / 3600.0
-
         stable_intercept = current_val - (stable_slope * times_smooth[-1])
         is_reliable = (r2 >= 0.6)
-
         return (time_rem_hours, stable_slope, stable_intercept, r2, is_reliable)
 
     def predict_composite_eta(self, current_time: float, current_score: float) -> tuple:
-        """
-        Calculate time to critical using log-linear regression.
-
-        Args:
-            current_time: Current timestamp.
-            current_score: Current composite score.
-
-        Returns:
-            Tuple of (traffic_light_color, status_message).
-        """
-        # Update buffer
+        """Calculate time to critical using log-linear regression."""
         self.composite_buffer.append(current_score)
         self.composite_times.append(current_time)
-
-        # Keep buffer manageable (~60 seconds)
         if len(self.composite_buffer) > 300:
             self.composite_buffer.pop(0)
             self.composite_times.pop(0)
-
-        # Need enough data
         if len(self.composite_buffer) < 50:
             return "gray", "Initializing..."
 
-        # Define thresholds
         CRITICAL_LIMIT = self.fft_threshold
         WARNING_LEVEL = CRITICAL_LIMIT * 0.2
 
-        # Green zone check
         if current_score < WARNING_LEVEL:
             return "green", "System Stable"
-
-        # Log-linear regression
         try:
             subset_scores = np.array(self.composite_buffer)[-150:]
             subset_times = np.array(self.composite_times)[-150:]
-
-            # Avoid log(0)
             subset_scores = np.maximum(subset_scores, 1e-9)
             log_scores = np.log(subset_scores)
-
             slope, intercept = np.polyfit(subset_times, log_scores, 1)
-
             if slope <= 0:
                 return "green", "Stable (No Growth)"
-
-            # Time to impact
             target_log = np.log(CRITICAL_LIMIT)
             current_log = log_scores[-1]
             seconds_left = (target_log - current_log) / slope
-
-            # Decide output
-            if seconds_left > 1200:  # >20 min
+            if seconds_left > 1200:
                 return "green", "Slight Trend (>20m)"
-            elif seconds_left > 300:  # 5-20 min
+            elif seconds_left > 300:
                 return "yellow", f"Warning: ~{int(seconds_left / 60)} min left"
             elif seconds_left > 0:
                 return "red", f"CRITICAL: < {int(seconds_left)}s"
             else:
                 return "red", "FAILURE IMMINENT"
-
         except Exception:
             return "gray", "Calc Error"

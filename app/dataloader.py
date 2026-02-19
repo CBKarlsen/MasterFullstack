@@ -46,7 +46,7 @@ class DataStreamer:
         """
         try:
             if filepath.endswith('.csv'):
-                df = pd.read_csv(filepath, sep=";", dtype=str, engine="python", nrows=10)
+                df = pd.read_csv(filepath, sep = None, dtype=str, engine="python", nrows=10)
             elif filepath.endswith('.xlsx'):
                 df = pd.read_excel(filepath, engine="calamine", nrows=10)
             else:
@@ -105,7 +105,7 @@ class DataStreamer:
             # LOAD DATA
             try:
                 if file_path.endswith('.csv'):
-                    df = pd.read_csv(file_path, sep=";", dtype=str, engine="python")
+                    df = pd.read_csv(file_path, sep = None, dtype=str, engine="python")
                 elif file_path.endswith('.xlsx'):
                     df = pd.read_excel(file_path, engine="calamine")
                 else:
@@ -187,7 +187,26 @@ class DataStreamer:
                 p_out_col = self._find_column(df, p_out_aliases)
 
                 # Yield Data as dictionary with ALL columns
+                # Parse actual timestamps for each row
+                actual_times = None
+                if raw_time is not None:
+                    try:
+                        time_str = raw_time.astype(str).str.replace(',', '.')
+                        t_objs = pd.to_datetime(time_str, errors='coerce', format='mixed')
+                        if t_objs.notna().sum() > 0:
+                            t0 = t_objs.dropna().iloc[0]
+                            actual_times = (t_objs - t0).dt.total_seconds().values
+                    except Exception:
+                        actual_times = None
+
+                # Yield Data as dictionary with ALL columns
                 for i in range(len(df)):
+                    # Use actual timestamp or synthetic
+                    if actual_times is not None and i < len(actual_times) and not np.isnan(actual_times[i]):
+                        row_time = global_time_counter + actual_times[i]
+                    else:
+                        row_time = global_time_counter + i * current_dt
+
                     # Build raw data dict with all columns
                     raw_data = {}
                     for col in numeric_columns:
@@ -199,14 +218,23 @@ class DataStreamer:
                     p_out = column_data[p_out_col].iloc[i] if p_out_col else 0.0
 
                     yield {
-                        "time": global_time_counter,
+                        "time": row_time,
                         "flow": flow,
                         "p_in": p_in,
                         "p_out": p_out,
                         "raw": raw_data,
                         "columns": numeric_columns
                     }
-                    global_time_counter += current_dt
+
+                # Update global counter for next file
+                if actual_times is not None:
+                    valid = actual_times[~np.isnan(actual_times)]
+                    if len(valid) > 0:
+                        global_time_counter += valid[-1] + current_dt
+                    else:
+                        global_time_counter += len(df) * current_dt
+                else:
+                    global_time_counter += len(df) * current_dt
 
             except KeyError as e:
                 print(f"Skipping {file_path} - Column missing: {e}")

@@ -11,10 +11,8 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
-      '/ws': {
-        target: 'ws://localhost:8000',
-        ws: true,
-      },
+      // WebSocket connects directly to ws://localhost:8000 in dev mode,
+      // bypassing this proxy entirely. See Dashboard.tsx.
     },
   },
 })

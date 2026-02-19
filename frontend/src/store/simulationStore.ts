@@ -35,7 +35,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   isCalibrating: false,
   chartData: [],
   rawChartData: [],
-  maxDataPoints: 200000, // Keep last 200000 points (~10000 seconds at 20Hz)
+  maxDataPoints: 5000, // Keep last 200000 points (~10000 seconds at 20Hz)
   availableColumns: [],
   selectedColumns: [],
   models: [],
@@ -104,6 +104,14 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       }
       if (data.spectral_slope !== undefined && data.spectral_slope !== null) {
         point.slope = data.spectral_slope;
+      }  if (data.limit_threshold !== undefined) {
+        point.limit_threshold = data.limit_threshold;
+      }
+      if (data.static_threshold !== undefined) {
+        point.static_threshold = data.static_threshold;
+      }
+      if (data.current_sigma !== undefined) {
+        point.current_sigma = data.current_sigma;
       }
 
       // Debug: Log every 100th point to see what data we have
@@ -135,7 +143,9 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       if (data.flow !== undefined) rawPoint['flow'] = data.flow;
       if (data.pressure_drop !== undefined) rawPoint['pressure_drop'] = data.pressure_drop;
 
-      // Update chart data with rolling window
+      // Update chart data with rolling window.
+      // The WebSocket hook batches messages via requestAnimationFrame,
+      // so this runs at most ~60 times/sec — the spread copy is acceptable.
       const newChartData = [...state.chartData, point];
       if (newChartData.length > state.maxDataPoints) {
         newChartData.splice(0, newChartData.length - state.maxDataPoints);
