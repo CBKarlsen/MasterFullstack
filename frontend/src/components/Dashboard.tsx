@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useSimulationStore } from "../store/simulationStore";
 import { TrafficLight } from "./TrafficLight";
-import { ModelCard } from "./ModelCard";
+import { MLLivePanel } from "./MLLivePanel";
 import { ProbabilityChart } from "./ProbabilityChart";
 import { RawDataChart } from "./RawDataChart";
 import { ColumnSelector } from "./ColumnSelector";
@@ -12,6 +12,7 @@ import { DataFileSelector } from "./DataFileSelector";
 import { ControlChartGrid } from "./ControlChartGrid";
 import type { TrafficLight as TLType } from "../types";
 import { BatchAnalysis } from "./BatchAnalysis";
+import { ModelsTab } from "./ModelsTab";
 
 export function Dashboard() {
   const {
@@ -31,7 +32,7 @@ export function Dashboard() {
     clearData,
   } = useSimulationStore();
 
-  const [mode, setMode] = useState<"realtime" | "batch">("realtime");
+  const [mode, setMode] = useState<"realtime" | "batch" | "models">("realtime");
   // Simulation configuration
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [speed, setSpeed] = useState<number>(1);
@@ -47,23 +48,19 @@ export function Dashboard() {
     { onMessage: updateData },
   );
 
-  // Fetch models on mount
-  useEffect(() => {
-    fetchModels();
-  }, []);
-
-  const fetchModels = async () => {
+  const fetchModels = useCallback(async () => {
     try {
       const response = await axios.get("/api/models");
       setModels(response.data);
     } catch (error) {
       console.error("Failed to fetch models:", error);
     }
-  };
+  }, [setModels]);
 
-  const handleToggleModel = (name: string, enabled: boolean) => {
-    toggleModel(name, enabled);
-  };
+  // Fetch models on mount
+  useEffect(() => {
+    fetchModels();
+  }, [fetchModels]);
 
   const handleStart = () => {
     if (!selectedFile) {
@@ -133,6 +130,22 @@ export function Dashboard() {
               }}
             >
               Batch Analysis
+            </button>
+            <button
+              onClick={() => setMode("models")}
+              style={{
+                padding: "6px 16px",
+                borderRadius: "6px",
+                border: "none",
+                background: mode === "models" ? "#fff" : "transparent",
+                fontWeight: mode === "models" ? 600 : 400,
+                cursor: "pointer",
+                fontSize: "13px",
+                boxShadow:
+                  mode === "models" ? "0 1px 2px rgba(0,0,0,0.1)" : "none",
+              }}
+            >
+              Models
             </button>
           </div>
           <p style={{ margin: "4px 0 0", color: "#6b7280" }}>
@@ -208,10 +221,13 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* Main Grid */}
+      {/* Models tab — full-width, no sidebar */}
+      {mode === "models" && <ModelsTab />}
+
+      {/* Main Grid — realtime + batch only */}
       <div
         style={{
-          display: "grid",
+          display: mode === "models" ? "none" : "grid",
           gridTemplateColumns: "1fr 350px",
           gap: "24px",
         }}
@@ -375,66 +391,14 @@ export function Dashboard() {
             <ModelUpload onUploadComplete={fetchModels} />
           </div>
 
-          {/* Model List */}
-          <div
-            style={{
-              padding: "20px",
-              backgroundColor: "#fff",
-              borderRadius: "8px",
-              border: "1px solid #e5e7eb",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: "16px",
-              }}
-            >
-              <h2 style={{ margin: 0, fontSize: "18px" }}>
-                Models ({models.length})
-              </h2>
-              <button
-                onClick={fetchModels}
-                style={{
-                  padding: "4px 8px",
-                  fontSize: "12px",
-                  border: "1px solid #e5e7eb",
-                  borderRadius: "4px",
-                  backgroundColor: "#fff",
-                  cursor: "pointer",
-                }}
-              >
-                Refresh
-              </button>
-            </div>
-
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: "12px" }}
-            >
-              {models.length === 0 ? (
-                <p
-                  style={{
-                    color: "#6b7280",
-                    textAlign: "center",
-                    padding: "20px",
-                  }}
-                >
-                  No models loaded. Start the backend server first.
-                </p>
-              ) : (
-                models.map((model) => (
-                  <ModelCard
-                    key={model.name}
-                    model={model}
-                    prediction={currentData?.models?.[model.name]}
-                    onToggle={handleToggleModel}
-                  />
-                ))
-              )}
-            </div>
-          </div>
+          {/* ML Live Panel — ensemble gauge + per-model votes + toggles */}
+          <MLLivePanel
+            currentData={currentData}
+            models={models}
+            isCalibrating={isCalibrating}
+            calibrationProgress={calibrationProgress}
+            onToggle={toggleModel}
+          />
         </div>
       </div>
     </div>

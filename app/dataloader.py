@@ -115,11 +115,14 @@ class DataStreamer:
                 continue
 
             try:
-                # Helper to clean numbers
+                # Helper to clean numbers — also guards against NaN/Inf
                 def to_float(x):
-                    if isinstance(x, (int, float)): return float(x)
+                    if isinstance(x, (int, float)):
+                        v = float(x)
+                        return 0.0 if (np.isnan(v) or np.isinf(v)) else v
                     try:
-                        return float(str(x).replace(',', '.'))
+                        v = float(str(x).replace(',', '.'))
+                        return 0.0 if (np.isnan(v) or np.isinf(v)) else v
                     except:
                         return 0.0
 
@@ -166,6 +169,9 @@ class DataStreamer:
 
                 for col in df.columns:
                     if col in time_cols:
+                        continue
+                    # Skip ghost columns created by trailing delimiters (e.g. "Unnamed: 10")
+                    if str(col).startswith("Unnamed:"):
                         continue
                     # Try to convert to numeric
                     try:

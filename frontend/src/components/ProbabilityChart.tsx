@@ -1,5 +1,6 @@
 import {
-  LineChart,
+  ComposedChart,
+  Area,
   Line,
   XAxis,
   YAxis,
@@ -7,7 +8,7 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  ReferenceLine,
+  ReferenceArea,
 } from 'recharts';
 import type { ChartDataPoint, ModelMetadata } from '../types';
 
@@ -18,25 +19,28 @@ interface ProbabilityChartProps {
   calibrationProgress?: number;
 }
 
-// Color palette for different models
 const MODEL_COLORS: Record<string, string> = {
-  fft_physics: '#3b82f6',    // Blue
-  ensemble: '#8b5cf6',        // Purple
-  random_forest: '#22c55e',   // Green
-  lstm: '#f59e0b',            // Orange
-  svm: '#ec4899',             // Pink
-  xgboost: '#14b8a6',         // Teal
+  'FFT Physics':   '#3b82f6',
+  'Random Forest': '#22c55e',
+  ensemble:        '#8b5cf6',
+  lstm:            '#f59e0b',
+  svm:             '#ec4899',
+  xgboost:         '#14b8a6',
 };
 
 const getModelColor = (name: string, index: number): string => {
   if (MODEL_COLORS[name]) return MODEL_COLORS[name];
-  // Generate color from index for unknown models
-  const hue = (index * 137) % 360; // Golden angle for good distribution
+  const hue = (index * 137) % 360;
   return `hsl(${hue}, 70%, 50%)`;
 };
 
-export function ProbabilityChart({ data, models, isCalibrating, calibrationProgress }: ProbabilityChartProps) {
-  // Show calibration state
+export function ProbabilityChart({
+  data,
+  models,
+  isCalibrating,
+  calibrationProgress,
+}: ProbabilityChartProps) {
+  // ── calibrating state ────────────────────────────────────────────────────
   if (isCalibrating) {
     const progress = calibrationProgress ? Math.round(calibrationProgress * 100) : 0;
     return (
@@ -77,8 +81,7 @@ export function ProbabilityChart({ data, models, isCalibrating, calibrationProgr
     );
   }
 
-  // Check if we have valid probability data (not just time)
-  const hasValidData = data.some((point) => point.ensemble !== undefined && point.ensemble !== null);
+  const hasValidData = data.some((p) => p.ensemble !== undefined && p.ensemble !== null);
 
   if (data.length === 0 || !hasValidData) {
     return (
@@ -98,25 +101,23 @@ export function ProbabilityChart({ data, models, isCalibrating, calibrationProgr
     );
   }
 
-  // Get active model names from data
-  const activeModelNames = models
-    .filter((m) => m.enabled)
-    .map((m) => m.name);
-
-  // Filter data to only include points with valid ensemble probability
-  const validData = data.filter((point) => point.ensemble !== undefined && point.ensemble !== null);
+  const activeModelNames = models.filter((m) => m.enabled).map((m) => m.name);
+  const validData = data.filter((p) => p.ensemble !== undefined && p.ensemble !== null);
 
   return (
     <div style={{ width: '100%', height: '300px' }}>
       <ResponsiveContainer>
-        <LineChart
-          data={validData}
-          margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
-        >
+        <ComposedChart data={validData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+
+          {/* ── Colored zone bands (drawn first so they sit behind lines) ── */}
+          <ReferenceArea y1={0}   y2={0.2} fill="#22c55e" fillOpacity={0.07} ifOverflow="hidden" />
+          <ReferenceArea y1={0.2} y2={0.7} fill="#f59e0b" fillOpacity={0.07} ifOverflow="hidden" />
+          <ReferenceArea y1={0.7} y2={1}   fill="#ef4444" fillOpacity={0.07} ifOverflow="hidden" />
+
           <XAxis
             dataKey="time"
-            tickFormatter={(v) => `${v.toFixed(0)}s`}
+            tickFormatter={(v) => `${Number(v).toFixed(0)}s`}
             stroke="#9ca3af"
             fontSize={12}
           />
@@ -137,24 +138,21 @@ export function ProbabilityChart({ data, models, isCalibrating, calibrationProgr
           />
           <Legend />
 
-          {/* Warning threshold */}
-          <ReferenceLine y={0.2} stroke="#eab308" strokeDasharray="5 5" />
-          {/* Critical threshold */}
-          <ReferenceLine y={0.7} stroke="#ef4444" strokeDasharray="5 5" />
-
-          {/* Ensemble line (always shown) */}
-          <Line
+          {/* ── Ensemble — filled area ── */}
+          <Area
             type="monotone"
             dataKey="ensemble"
             name="Ensemble"
             stroke={MODEL_COLORS.ensemble}
-            strokeWidth={2}
+            strokeWidth={2.5}
+            fill={MODEL_COLORS.ensemble}
+            fillOpacity={0.15}
             dot={false}
             isAnimationActive={false}
             connectNulls={false}
           />
 
-          {/* Individual model lines */}
+          {/* ── Individual model lines (dashed so ensemble stands out) ── */}
           {activeModelNames.map((name, index) => (
             <Line
               key={name}
@@ -163,12 +161,13 @@ export function ProbabilityChart({ data, models, isCalibrating, calibrationProgr
               name={name}
               stroke={getModelColor(name, index)}
               strokeWidth={1.5}
+              strokeDasharray="4 2"
               dot={false}
               isAnimationActive={false}
               connectNulls={false}
             />
           ))}
-        </LineChart>
+        </ComposedChart>
       </ResponsiveContainer>
     </div>
   );

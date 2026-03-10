@@ -44,7 +44,7 @@ const METHODS = [
   },
 ] as const;
 
-const SIGMA_OPTIONS = [1.0, 2.0, 3.0, 4.0, 5.0];
+const SIGMA_OPTIONS = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
 
 const COLUMN_COLORS = [
   '#0000FF',
@@ -245,7 +245,7 @@ export function ControlChartGrid({
                 height={chartHeight}
               />
             );
-          })}
+          })}      
         </div>
       </div>
     </div>

@@ -1,7 +1,8 @@
-import { useMemo } from "react";
+import { useMemo, useId } from "react";
 import {
-  AreaChart,
+  ComposedChart,
   Area,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -23,6 +24,10 @@ interface ControlChartProps {
   unit?: string;
   useLogScale?: boolean;
   height?: number;
+  /** Optional overlay line (e.g. rolling mean). Must be aligned with `data` by index. */
+  overlayData?: ControlChartDataPoint[];
+  overlayColor?: string;
+  overlayLabel?: string;
 }
 
 const COLORS = {
@@ -57,7 +62,11 @@ export function ControlChart({
   unit = "",
   useLogScale = false,
   height = 200,
+  overlayData,
+  overlayColor = "#f59e0b",
+  overlayLabel = "Rolling mean",
 }: ControlChartProps) {
+  const gradientId = `grad-${useId().replace(/:/g, "")}`;
   const { chartData, isBreaching, yDomain, xDomain } = useMemo(() => {
     if (data.length === 0) {
       return {
@@ -71,11 +80,26 @@ export function ControlChart({
     const latestValue = data[data.length - 1].value;
     const isBreaching = latestValue > threshold;
 
+    // Build a time → overlay-value lookup for merging (exact float match is safe
+    // here because both arrays come from the same source timestamps).
+    const overlayMap = new Map<number, number>();
+    if (overlayData) {
+      for (const o of overlayData) overlayMap.set(o.time, o.value);
+    }
+
     // Transform data for display - use absolute time
-    const chartData = data.map((point) => ({
-      ...point,
-      safeValue: useLogScale && point.value <= 0 ? LOG_SAFE_MIN : point.value,
-    }));
+    const chartData = data.map((point) => {
+      const raw = point.value;
+      const safeValue = useLogScale && raw <= 0 ? LOG_SAFE_MIN : raw;
+      const ov = overlayMap.get(point.time);
+      const smoothedValue =
+        ov !== undefined
+          ? useLogScale && ov <= 0
+            ? LOG_SAFE_MIN
+            : ov
+          : undefined;
+      return { ...point, safeValue, smoothedValue };
+    });
 
     // Calculate X-Axis Domain (dynamic, based on actual time range)
     const minTime = data[0].time;
@@ -83,12 +107,15 @@ export function ControlChart({
     const xDomain: [number, number] = [minTime, maxTime];
 
     // Calculate Y-Axis Domain
-    let minVal = Math.min(...chartData.map((d) => d.safeValue));
+    const minVal = Math.min(...chartData.map((d) => d.safeValue));
     let maxVal = Math.max(...chartData.map((d) => d.safeValue));
 
-    // Ensure domain includes the threshold line
+    // Ensure domain includes the threshold line and overlay
     if (isFinite(threshold)) {
       maxVal = Math.max(maxVal, threshold);
+    }
+    if (overlayData && overlayData.length > 0) {
+      maxVal = Math.max(maxVal, ...overlayData.map((o) => o.value));
     }
 
     let yDomain: [number | string, number | string] = ["auto", "auto"];
@@ -100,7 +127,7 @@ export function ControlChart({
     }
 
     return { chartData, isBreaching, yDomain, xDomain };
-  }, [data, threshold, useLogScale]);
+  }, [data, threshold, useLogScale, overlayData]);
 
   // Formatters
   const formatXAxis = (val: number) => formatTime(val);
@@ -194,10 +221,10 @@ export function ControlChart({
       {/* Chart */}
       <div style={{ width: "100%", height: height, minWidth: 200 }}>
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={chartData}>
+          <ComposedChart data={chartData}>
             <defs>
               <linearGradient
-                id={`grad-${title.replace(/\s/g, "-")}`}
+                id={gradientId}
                 x1="0"
                 y1="0"
                 x2="0"
@@ -243,7 +270,10 @@ export function ControlChart({
 
             <Tooltip
               labelFormatter={(v) => `Time: ${formatTime(Number(v))}`}
-              formatter={(v: number) => [v.toFixed(5), title]}
+              formatter={(v: number, name: string) => [
+                v.toFixed(5),
+                name === "smoothedValue" ? overlayLabel : title,
+              ]}
             />
 
             {/* The Fixed Backend Threshold */}
@@ -261,15 +291,33 @@ export function ControlChart({
               />
             )}
 
+            {/* Raw signal area */}
             <Area
               type="monotone"
               dataKey="safeValue"
               stroke={isBreaching ? COLORS.breach : color}
-              fill={`url(#grad-${title.replace(/\s/g, "-")})`}
-              strokeWidth={2}
+              fill={`url(#${gradientId})`}
+              strokeWidth={1.5}
+              strokeOpacity={0.6}
               isAnimationActive={false}
+              dot={false}
+              name={title}
             />
-          </AreaChart>
+
+            {/* Rolling mean overlay line */}
+            {overlayData && (
+              <Line
+                type="monotone"
+                dataKey="smoothedValue"
+                stroke={overlayColor}
+                strokeWidth={2.5}
+                dot={false}
+                isAnimationActive={false}
+                connectNulls
+                name="smoothedValue"
+              />
+            )}
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
     </div>

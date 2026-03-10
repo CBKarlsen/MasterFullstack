@@ -49,6 +49,7 @@ class ModelMetadata:
     sequence_length: int = 1          # For sequence models: number of timesteps
     framework_version: str = ""       # e.g., "torch==2.0.1"
     enabled: bool = True              # Whether model is active
+    weight: float = 1.0              # Ensemble trust weight (0 = ignored, 2 = double influence)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to JSON-serializable dictionary."""
@@ -64,6 +65,7 @@ class ModelMetadata:
             "sequence_length": self.sequence_length,
             "framework_version": self.framework_version,
             "enabled": self.enabled,
+            "weight": self.weight,
         }
 
     @classmethod
@@ -83,6 +85,7 @@ class ModelMetadata:
             sequence_length=data.get("sequence_length", 1),
             framework_version=data.get("framework_version", ""),
             enabled=data.get("enabled", True),
+            weight=data.get("weight", 1.0),
         )
 
 

@@ -173,6 +173,14 @@ class ModelRegistry:
                 return True
             return False
 
+    def set_weight(self, name: str, weight: float) -> bool:
+        """Set the ensemble trust weight for a model (clamped to 0.0–5.0)."""
+        with self._lock:
+            if name in self._models:
+                self._models[name].model.metadata.weight = max(0.0, min(weight, 5.0))
+                return True
+            return False
+
     def list_models(self) -> List[Dict[str, Any]]:
         """Get metadata for all registered models."""
         with self._lock:

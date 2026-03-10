@@ -7,5 +7,6 @@ in the standard model interface for consistency with ML models.
 """
 
 from .fft_physics import FFTPhysicsModel
+from .random_forest import RandomForestModel
 
-__all__ = ['FFTPhysicsModel']
+__all__ = ['FFTPhysicsModel', 'RandomForestModel']

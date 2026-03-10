@@ -24,6 +24,7 @@ interface SimulationState {
   updateData: (data: SimulationData) => void;
   setModels: (models: ModelMetadata[]) => void;
   toggleModel: (name: string, enabled: boolean) => void;
+  updateModelWeight: (name: string, weight: number) => void;
   setSelectedColumns: (columns: string[]) => void;
   clearData: () => void;
 }
@@ -173,6 +174,14 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
     const state = get();
     const updatedModels = state.models.map((m) =>
       m.name === name ? { ...m, enabled } : m
+    );
+    set({ models: updatedModels });
+  },
+
+  updateModelWeight: (name: string, weight: number) => {
+    const state = get();
+    const updatedModels = state.models.map((m) =>
+      m.name === name ? { ...m, weight } : m
     );
     set({ models: updatedModels });
   },

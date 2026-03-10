@@ -15,10 +15,13 @@ from typing import Optional
 import os
 import shutil
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
+
+_training_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="rf_train")
 
 from .engine import SimulationEngine
 from .models import ModelRegistry, get_registry
-from .models.builtin import FFTPhysicsModel
+from .models.builtin import FFTPhysicsModel, RandomForestModel
 from .dataloader import DataStreamer
 from .batch import run_batch_analysis, recompute_thresholds
 
@@ -49,9 +52,9 @@ async def startup_event():
     """Initialize model registry on server start."""
     registry = get_registry(str(MODELS_DIR))
 
-    # Register built-in FFT physics model
-    fft_model = FFTPhysicsModel()
-    registry.register(fft_model)
+    # Register built-in models
+    registry.register(FFTPhysicsModel())
+    registry.register(RandomForestModel())
 
     # Discover user models from models/ directory
     loaded = registry.discover_models()
@@ -164,6 +167,32 @@ def enable_model(model_name: str, enabled: bool = True):
     }
 
 
+@app.put("/api/models/{model_name}/weight")
+def set_model_weight(model_name: str, weight: float = 1.0):
+    """
+    Set the ensemble trust weight for a model.
+
+    A weight of 1.0 is normal. 0.0 effectively mutes the model from the
+    ensemble without disabling its predictions. 2.0 doubles its influence.
+
+    Args:
+        model_name: Name of the model.
+        weight: Trust weight between 0.0 and 5.0.
+
+    Returns:
+        Updated weight.
+    """
+    registry = get_registry()
+
+    if not registry.get(model_name):
+        raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found")
+
+    clamped = max(0.0, min(weight, 5.0))
+    registry.set_weight(model_name, clamped)
+
+    return {"model": model_name, "weight": clamped}
+
+
 @app.delete("/api/models/{model_name}")
 def delete_model(model_name: str):
     """
@@ -274,6 +303,188 @@ async def upload_model(
     }
 
 
+# =============================================================================
+# Random Forest Training Endpoints
+# =============================================================================
+
+@app.get("/api/models/random_forest/training-info")
+def get_rf_training_info():
+    """Return the current training status of the built-in Random Forest."""
+    from .models.builtin.random_forest import RandomForestModel
+    registry = get_registry()
+    model = registry.get("Random Forest")
+    if not model or not isinstance(model, RandomForestModel):
+        raise HTTPException(status_code=404, detail="Random Forest model not found")
+    return model.get_training_info()
+
+
+def _do_rf_training(
+    model: "RandomForestModel",
+    data_path: Path,
+    filename: str,
+    sigma: float,
+    calibration_seconds: float,
+    include_warnings: bool,
+    n_estimators: int,
+    max_depth: Optional[int],
+) -> None:
+    """
+    Blocking training job executed in a background thread.
+    Writes progress into model._training_state throughout.
+    """
+    import numpy as np
+
+    def _set(phase: str, percent: int, message: str) -> None:
+        model._training_state = {"phase": phase, "percent": percent, "message": message}
+
+    try:
+        _set("analyzing", 5, "Analyzing data…")
+        results = run_batch_analysis(
+            filepath=str(data_path),
+            sigma=sigma,
+            calibration_seconds=calibration_seconds,
+        )
+
+        if "error" in results:
+            _set("error", 0, results["error"])
+            model._training_error = results["error"]
+            return
+
+        _set("extracting", 68, "Extracting features…")
+        features_list: list = []
+        labels: list = []
+
+        for pt in results["timeseries"]:
+            if pt.get("phase") != "analysis":
+                continue
+            light = pt.get("traffic_light", "gray")
+            if light == "green":
+                label = 0
+            elif light == "red":
+                label = 1
+            elif light == "yellow" and include_warnings:
+                label = 1
+            else:
+                continue
+            features_list.append([
+                pt.get("static_score", 0.0),
+                pt.get("composite_score", 0.0),
+                pt.get("turbulence_score", 0.0),
+                pt.get("spectral_slope", 0.0),
+            ])
+            labels.append(label)
+
+        if len(features_list) < 20:
+            msg = (
+                f"Not enough labeled samples ({len(features_list)}). "
+                "Try a longer file, lower sigma, or enable 'Include warnings'."
+            )
+            _set("error", 0, msg)
+            model._training_error = msg
+            return
+
+        X = np.array(features_list)
+        y = np.array(labels)
+        n_healthy = int(sum(y == 0))
+        n_clogged = int(sum(y == 1))
+
+        if n_healthy < 5:
+            msg = f"Too few healthy samples ({n_healthy}). Need at least 5."
+            _set("error", 0, msg)
+            model._training_error = msg
+            return
+
+        if n_clogged < 5:
+            msg = f"Too few clogged samples ({n_clogged}). Need at least 5."
+            _set("error", 0, msg)
+            model._training_error = msg
+            return
+
+        _set("training", 75, f"Training Random Forest ({n_estimators} trees)…")
+        model.set_training_source(f"user data: {filename}")
+        stats = model.train(X, y, n_estimators=n_estimators, max_depth=max_depth)
+
+        _set("complete", 100, "Training complete")
+        model._training_result = {
+            "message": "Model trained successfully",
+            "file_used": filename,
+            "sigma": sigma,
+            **stats,
+        }
+        model._training_error = None
+
+    except Exception as exc:
+        msg = str(exc)
+        _set("error", 0, msg)
+        model._training_error = msg
+        model._training_result = None
+
+
+@app.post("/api/models/random_forest/train")
+def train_random_forest(
+    file: str,
+    sigma: float = 3.0,
+    calibration_seconds: float = 30.0,
+    include_warnings: bool = False,
+    n_estimators: int = 100,
+    max_depth: Optional[int] = 8,
+):
+    """
+    Start training the built-in Random Forest in a background thread.
+
+    Returns immediately with ``{"status": "started"}``.
+    Poll ``GET /api/models/random_forest/training-progress`` for updates.
+    """
+    registry = get_registry()
+    model = registry.get("Random Forest")
+    if not model or not isinstance(model, RandomForestModel):
+        raise HTTPException(status_code=404, detail="Random Forest model not found in registry")
+
+    # Guard against concurrent training
+    current_phase = model._training_state.get("phase", "idle")
+    if current_phase not in ("idle", "complete", "error"):
+        raise HTTPException(status_code=409, detail="Training already in progress")
+
+    data_path = DATA_DIR / file
+    if not data_path.exists():
+        raise HTTPException(status_code=404, detail=f"File '{file}' not found")
+
+    # Reset state before handing off to the thread
+    model._training_state = {"phase": "starting", "percent": 2, "message": "Starting…"}
+    model._training_result = None
+    model._training_error = None
+
+    _training_executor.submit(
+        _do_rf_training,
+        model, data_path, file, sigma, calibration_seconds,
+        include_warnings, n_estimators, max_depth,
+    )
+
+    return {"status": "started"}
+
+
+@app.get("/api/models/random_forest/training-progress")
+def get_rf_training_progress():
+    """Poll this endpoint while training to get live progress."""
+    registry = get_registry()
+    model = registry.get("Random Forest")
+    if not model or not isinstance(model, RandomForestModel):
+        raise HTTPException(status_code=404, detail="Random Forest model not found")
+    return model.get_training_state()
+
+
+@app.post("/api/models/random_forest/reset")
+def reset_random_forest():
+    """Discard the user-trained Random Forest and revert to synthetic training."""
+    from .models.builtin.random_forest import RandomForestModel
+    registry = get_registry()
+    model = registry.get("Random Forest")
+    if not model or not isinstance(model, RandomForestModel):
+        raise HTTPException(status_code=404, detail="Random Forest model not found")
+    model.reset_to_synthetic()
+    return {"message": "Model reset to synthetic training data"}
+
+
 @app.get("/api/models/{model_name}/stats")
 def get_model_stats(model_name: str):
     """
@@ -350,11 +561,13 @@ def list_data_files():
     # Sort by modified date (newest first)
     items.sort(key=lambda x: x['modified'], reverse=True)
     return items
+
+
 @app.post("/api/analyze")
 async def analyze_file(
     file: str,
     sigma: float = 3.0,
-    calibration_samples: int = 400,
+    calibration_seconds: float = 30.0,
 ):
     data_path = DATA_DIR / file
     if not data_path.exists():
@@ -363,7 +576,7 @@ async def analyze_file(
         results = run_batch_analysis(
             filepath=str(data_path),
             sigma=sigma,
-            calibration_samples=calibration_samples,
+            calibration_seconds=calibration_seconds,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")

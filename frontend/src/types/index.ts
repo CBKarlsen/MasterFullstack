@@ -12,6 +12,7 @@ export interface ModelMetadata {
   sequence_length?: number;
   framework_version?: string;
   enabled: boolean;
+  weight?: number;
   prediction_count?: number;
   avg_inference_ms?: number;
   last_error?: string | null;

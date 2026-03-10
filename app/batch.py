@@ -29,7 +29,7 @@ def _sanitize(value):
 def run_batch_analysis(
     filepath: str,
     sigma: float = 3.0,
-    calibration_samples: int = 400,
+    calibration_seconds: float = 30,
     fs: float = None,  # None = auto-detect
     window_sec: float = 10.0,
 ) -> Dict[str, Any]:
@@ -42,6 +42,7 @@ def run_batch_analysis(
     all_raw_points = []
     columns = []
     detected_fs = None
+    calibration_samples = None
 
     for data_point in streamer:
         t = data_point.get("time", 0.0)
@@ -67,13 +68,19 @@ def run_batch_analysis(
             dt = all_raw_points[1]["time"] - all_raw_points[0]["time"]
             if dt > 0:
                 detected_fs = round(1.0 / dt, 2)
+                actual_fs = fs if fs is not None else detected_fs
+                calibration_samples = max(int(calibration_seconds * actual_fs), 50)
+                print(f"Detected fs={actual_fs} Hz → need {calibration_samples} samples for {calibration_seconds}s calibration")
 
-        if len(calibration_buffer) >= calibration_samples:
+        # Stop when we have enough (only after calibration_samples is computed)
+        if calibration_samples is not None and len(calibration_buffer) >= calibration_samples:
             break
 
-    # Use detected fs, or fallback
+    # Fallback if fs was never detected
     actual_fs = fs if fs is not None else (detected_fs if detected_fs else 20.0)
-    print(f"Batch analysis using fs={actual_fs} Hz")
+    if calibration_samples is None:
+        calibration_samples = max(int(calibration_seconds * actual_fs), 50)
+    print(f"Batch analysis using fs={actual_fs} Hz, calibration={len(calibration_buffer)} samples ({calibration_seconds}s)")
 
     # Now create detector with correct fs
     detector = CloggingDetector(fs=actual_fs, window_sec=window_sec, sigma=sigma)
@@ -130,10 +137,10 @@ def run_batch_analysis(
                 "light_msg": results.get("status_msg", ""),
                 "ensemble_probability": results.get("ensemble_probability", 0.0),
                 "models": results.get("models", {}),
-                "raw": raw_data,
+                "raw": _sanitize(raw_data),
                 "phase": "analysis",
             })
-
+            
 
     analysis_points = [p for p in timeseries if p["phase"] == "analysis"]
     print(f"Batch complete: {len(timeseries)} total, {len(analysis_points)} analysis points")

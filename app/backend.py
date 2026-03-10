@@ -355,30 +355,38 @@ class CloggingDetector:
                 else:
                     result = model.predict(features)
                     results[name] = result.to_dict()
+                # Attach the user-configured trust weight so the ensemble can use it
+                results[name]['weight'] = model.metadata.weight
             except Exception as e:
                 results[name] = {
                     'probability': 0.0,
                     'confidence': 0.0,
+                    'weight': model.metadata.weight,
                     'error': str(e)
                 }
         return results
 
     def _calculate_ensemble(self, model_results: Dict[str, Dict[str, Any]]) -> float:
-        """Calculate weighted ensemble probability from all model predictions."""
+        """Calculate weighted ensemble probability from all model predictions.
+
+        Final weight = confidence × user trust weight, so a user can amplify or
+        mute any model's contribution without retraining.
+        """
         probabilities = []
         weights = []
         for name, result in model_results.items():
             prob = result.get('probability', 0.0)
             conf = result.get('confidence', 1.0)
+            user_weight = result.get('weight', 1.0)
             if 'error' not in result and prob > 0:
                 probabilities.append(prob)
-                weights.append(conf)
+                weights.append(conf * user_weight)
         if not probabilities:
             return 0.0
         total_weight = sum(weights)
         if total_weight > 0:
             return sum(p * w for p, w in zip(probabilities, weights)) / total_weight
-        return np.mean(probabilities)
+        return float(np.mean(probabilities))
 
     def calculate_spectral_slope(self, freqs: np.ndarray, power: np.ndarray) -> float:
         """
