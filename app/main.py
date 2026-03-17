@@ -21,7 +21,7 @@ _training_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="rf_tr
 
 from .engine import SimulationEngine
 from .models import ModelRegistry, get_registry
-from .models.builtin import FFTPhysicsModel, RandomForestModel
+from .models.builtin import FFTPhysicsModel, RandomForestModel, IsolationForestModel
 from .dataloader import DataStreamer
 from .batch import run_batch_analysis, recompute_thresholds
 
@@ -55,6 +55,7 @@ async def startup_event():
     # Register built-in models
     registry.register(FFTPhysicsModel())
     registry.register(RandomForestModel())
+    registry.register(IsolationForestModel())
 
     # Discover user models from models/ directory
     loaded = registry.discover_models()
@@ -481,6 +482,159 @@ def reset_random_forest():
     model = registry.get("Random Forest")
     if not model or not isinstance(model, RandomForestModel):
         raise HTTPException(status_code=404, detail="Random Forest model not found")
+    model.reset_to_synthetic()
+    return {"message": "Model reset to synthetic training data"}
+
+
+# =============================================================================
+# Isolation Forest Training Endpoints
+# =============================================================================
+
+@app.get("/api/models/isolation_forest/training-info")
+def get_if_training_info():
+    """Return the current training status of the built-in Isolation Forest."""
+    registry = get_registry()
+    model = registry.get("Isolation Forest")
+    if not model or not isinstance(model, IsolationForestModel):
+        raise HTTPException(status_code=404, detail="Isolation Forest model not found")
+    return model.get_training_info()
+
+
+def _do_if_training(
+    model: "IsolationForestModel",
+    data_path: Path,
+    filename: str,
+    sigma: float,
+    calibration_seconds: float,
+    n_estimators: int,
+    contamination: float,
+) -> None:
+    """
+    Blocking Isolation Forest training job — runs in a background thread.
+    Extracts only GREEN (healthy) points from batch analysis, so the model
+    learns the normal operating distribution without any labelled clogged data.
+    """
+    import numpy as np
+
+    def _set(phase: str, percent: int, message: str) -> None:
+        model._training_state = {"phase": phase, "percent": percent, "message": message}
+
+    try:
+        _set("analyzing", 5, "Analyzing data…")
+        results = run_batch_analysis(
+            filepath=str(data_path),
+            sigma=sigma,
+            calibration_seconds=calibration_seconds,
+        )
+
+        if "error" in results:
+            _set("error", 0, results["error"])
+            model._training_error = results["error"]
+            return
+
+        _set("extracting", 68, "Extracting healthy samples…")
+        features_list: list = []
+
+        for pt in results["timeseries"]:
+            if pt.get("phase") != "analysis":
+                continue
+            # Unsupervised: only use GREEN (physics-confirmed healthy) points
+            if pt.get("traffic_light") != "green":
+                continue
+            features_list.append([
+                pt.get("static_score", 0.0),
+                pt.get("composite_score", 0.0),
+                pt.get("turbulence_score", 0.0),
+                pt.get("spectral_slope", 0.0),
+            ])
+
+        if len(features_list) < 20:
+            msg = (
+                f"Not enough healthy samples ({len(features_list)}). "
+                "Try a longer file, lower sigma, or a file with more stable baseline data."
+            )
+            _set("error", 0, msg)
+            model._training_error = msg
+            return
+
+        X_healthy = np.array(features_list)
+
+        _set("training", 80, f"Training Isolation Forest ({n_estimators} trees)…")
+        model.set_training_source(f"user data: {filename}")
+        stats = model.train(X_healthy, n_estimators=n_estimators, contamination=contamination)
+
+        _set("complete", 100, "Training complete")
+        model._training_result = {
+            "message": "Model trained successfully",
+            "file_used": filename,
+            "sigma": sigma,
+            **stats,
+        }
+        model._training_error = None
+
+    except Exception as exc:
+        msg = str(exc)
+        _set("error", 0, msg)
+        model._training_error = msg
+        model._training_result = None
+
+
+@app.post("/api/models/isolation_forest/train")
+def train_isolation_forest(
+    file: str,
+    sigma: float = 3.0,
+    calibration_seconds: float = 30.0,
+    n_estimators: int = 100,
+    contamination: float = 0.05,
+):
+    """
+    Start training the Isolation Forest in a background thread.
+
+    Only uses GREEN-labelled (physics-confirmed healthy) samples.
+    Returns immediately — poll GET /api/models/isolation_forest/training-progress.
+    """
+    registry = get_registry()
+    model = registry.get("Isolation Forest")
+    if not model or not isinstance(model, IsolationForestModel):
+        raise HTTPException(status_code=404, detail="Isolation Forest model not found")
+
+    current_phase = model._training_state.get("phase", "idle")
+    if current_phase not in ("idle", "complete", "error"):
+        raise HTTPException(status_code=409, detail="Training already in progress")
+
+    data_path = DATA_DIR / file
+    if not data_path.exists():
+        raise HTTPException(status_code=404, detail=f"File '{file}' not found")
+
+    model._training_state = {"phase": "starting", "percent": 2, "message": "Starting…"}
+    model._training_result = None
+    model._training_error = None
+
+    _training_executor.submit(
+        _do_if_training,
+        model, data_path, file, sigma, calibration_seconds, n_estimators, contamination,
+    )
+
+    return {"status": "started"}
+
+
+@app.get("/api/models/isolation_forest/training-progress")
+def get_if_training_progress():
+    """Poll this endpoint while training to get live progress."""
+    registry = get_registry()
+    model = registry.get("Isolation Forest")
+    if not model or not isinstance(model, IsolationForestModel):
+        raise HTTPException(status_code=404, detail="Isolation Forest model not found")
+    return model.get_training_state()
+
+
+@app.post("/api/models/isolation_forest/reset")
+def reset_isolation_forest():
+    """Discard user-trained Isolation Forest and revert to synthetic training."""
+    registry = get_registry()
+    model = registry.get("Isolation Forest")
+    if not model or not isinstance(model, IsolationForestModel):
+        raise HTTPException(status_code=404, detail="Isolation Forest model not found")
     model.reset_to_synthetic()
     return {"message": "Model reset to synthetic training data"}
 

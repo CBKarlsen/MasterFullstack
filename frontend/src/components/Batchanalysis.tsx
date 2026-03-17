@@ -3,14 +3,23 @@ import axios from "axios";
 import {
   ComposedChart,
   Area,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
+  Legend,
   ResponsiveContainer,
   ReferenceArea,
 } from "recharts";
 import { ControlChart, type ControlChartDataPoint } from "./ControlChart";
+
+interface ModelPrediction {
+  probability: number;
+  confidence: number;
+  classification?: string;
+  weight?: number;
+}
 
 interface AnalysisPoint {
   time: number;
@@ -23,6 +32,7 @@ interface AnalysisPoint {
   traffic_light: string;
   light_msg: string;
   ensemble_probability: number;
+  models?: Record<string, ModelPrediction>;
   phase: string;
   raw?: Record<string, number>;
 }
@@ -248,6 +258,16 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
     return { peak, firstCriticalSec: firstCritical?.time ?? null, avgRedProb };
   }, [result]);
 
+  // Collect all distinct model names present in the result
+  const modelNames = useMemo(() => {
+    if (!result) return [] as string[];
+    const names = new Set<string>();
+    for (const p of result.timeseries) {
+      if (p.models) Object.keys(p.models).forEach((k) => names.add(k));
+    }
+    return Array.from(names);
+  }, [result]);
+
   const mlChartData = useMemo(() => {
     if (!result) return [];
     const pts = result.timeseries.filter((p) => p.phase === "analysis");
@@ -255,7 +275,18 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
     const step = Math.max(1, Math.floor(pts.length / maxPts));
     return pts
       .filter((_, i) => i % step === 0)
-      .map((p) => ({ time: p.time, ensemble: p.ensemble_probability }));
+      .map((p) => {
+        const point: Record<string, number> = {
+          time: p.time,
+          ensemble: p.ensemble_probability,
+        };
+        if (p.models) {
+          Object.entries(p.models).forEach(([name, pred]) => {
+            point[name] = pred.probability;
+          });
+        }
+        return point;
+      });
   }, [result]);
 
   return (
@@ -608,6 +639,8 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
               trafficDist={trafficDist}
               mlStats={mlStats}
               mlChartData={mlChartData}
+              modelNames={modelNames}
+              timeseries={result.timeseries}
             />
           )}
         </div>
@@ -633,21 +666,52 @@ interface MLStats {
   avgRedProb: number | null;
 }
 
-interface MLChartPoint {
-  time: number;
-  ensemble: number;
+// Dynamic: includes ensemble + one key per active model
+type MLChartPoint = Record<string, number>;
+
+// Assign a stable colour to each model name
+const MODEL_COLORS: Record<string, string> = {
+  "FFT Physics":        "#f59e0b",
+  "Random Forest":      "#16a34a",
+  "Isolation Forest":   "#0284c7",
+};
+const FALLBACK_COLORS = ["#8b5cf6", "#ec4899", "#06b6d4", "#f97316"];
+function modelColor(name: string, idx: number): string {
+  return MODEL_COLORS[name] ?? FALLBACK_COLORS[idx % FALLBACK_COLORS.length];
 }
 
 function BatchMLSection({
   trafficDist,
   mlStats,
   mlChartData,
+  modelNames,
+  timeseries,
 }: {
   trafficDist: TrafficDist | null;
   mlStats: MLStats | null;
   mlChartData: MLChartPoint[];
+  modelNames: string[];
+  timeseries: AnalysisPoint[];
 }) {
   const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
+
+  // Per-model stats: peak probability and first time >= 0.7
+  const perModelStats = useMemo(() => {
+    const pts = timeseries.filter((p) => p.phase === "analysis" && p.models);
+    return modelNames.map((name, idx) => {
+      let peak = 0;
+      let firstCriticalSec: number | null = null;
+      for (const p of pts) {
+        const prob = p.models?.[name]?.probability ?? 0;
+        if (prob > peak) peak = prob;
+        if (firstCriticalSec === null && prob >= 0.7) firstCriticalSec = p.time;
+      }
+      // A model is considered "dormant" if its peak probability is exactly 0
+      // across all analysis points — this happens when IF runs on synthetic data.
+      const dormant = peak === 0 && pts.length > 10;
+      return { name, peak, firstCriticalSec, color: modelColor(name, idx), dormant };
+    });
+  }, [modelNames, timeseries]);
 
   return (
     <div style={{ marginTop: "20px" }}>
@@ -745,20 +809,76 @@ function BatchMLSection({
         )}
       </div>
 
-      {/* ── Ensemble probability chart ── */}
-      {mlChartData.length > 0 && (
-        <div
-          style={{
-            padding: "16px 20px",
-            backgroundColor: "#fff",
-            borderRadius: "8px",
-            border: "1px solid #e5e7eb",
-          }}
-        >
+      {/* ── Per-model breakdown table ── */}
+      {perModelStats.length > 0 && (
+        <div style={{
+          padding: "16px 20px", backgroundColor: "#fff",
+          borderRadius: "8px", border: "1px solid #e5e7eb", marginBottom: "12px",
+        }}>
           <div style={{ fontSize: "14px", fontWeight: 600, color: "#374151", marginBottom: "12px" }}>
-            Ensemble ML Probability Over Time
+            Per-Model Breakdown
           </div>
-          <ResponsiveContainer width="100%" height={220}>
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(perModelStats.length, 3)}, 1fr)`, gap: "12px" }}>
+            {perModelStats.map(({ name, peak, firstCriticalSec, color, dormant }) => (
+              <div key={name} style={{
+                padding: "12px 14px", borderRadius: "8px",
+                border: `2px solid ${dormant ? "#fcd34d" : color + "20"}`,
+                backgroundColor: dormant ? "#fffbeb" : `${color}08`,
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                  <span style={{ width: "10px", height: "10px", borderRadius: "50%", backgroundColor: dormant ? "#fbbf24" : color, flexShrink: 0 }} />
+                  <span style={{ fontSize: "13px", fontWeight: 700, color: "#374151" }}>{name}</span>
+                  {dormant && (
+                    <span style={{
+                      fontSize: "10px", fontWeight: 700, padding: "2px 6px",
+                      backgroundColor: "#fef3c7", color: "#92400e",
+                      borderRadius: "10px", border: "1px solid #fcd34d", marginLeft: "auto",
+                    }}>
+                      Awaiting training
+                    </span>
+                  )}
+                </div>
+                {dormant ? (
+                  <div style={{ fontSize: "11px", color: "#92400e", lineHeight: 1.5 }}>
+                    Not yet trained on your sensor data.
+                    Go to the <strong>Models</strong> tab to train this model on a healthy recording.
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "4px", fontSize: "12px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ color: "#6b7280" }}>Peak probability</span>
+                      <span style={{ fontWeight: 700, color: peak >= 0.7 ? "#dc2626" : peak >= 0.3 ? "#d97706" : "#16a34a" }}>
+                        {pct(peak)}
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ color: "#6b7280" }}>First critical ≥70%</span>
+                      <span style={{ fontWeight: 600, color: firstCriticalSec !== null ? "#dc2626" : "#9ca3af" }}>
+                        {firstCriticalSec !== null ? formatHHMMSS(firstCriticalSec) : "None"}
+                      </span>
+                    </div>
+                    {/* Mini probability bar */}
+                    <div style={{ marginTop: "4px", height: "6px", backgroundColor: "#e5e7eb", borderRadius: "3px", overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${peak * 100}%`, backgroundColor: color, borderRadius: "3px" }} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── ML probability chart — ensemble + individual models ── */}
+      {mlChartData.length > 0 && (
+        <div style={{
+          padding: "16px 20px", backgroundColor: "#fff",
+          borderRadius: "8px", border: "1px solid #e5e7eb",
+        }}>
+          <div style={{ fontSize: "14px", fontWeight: 600, color: "#374151", marginBottom: "12px" }}>
+            ML Probability Over Time
+          </div>
+          <ResponsiveContainer width="100%" height={260}>
             <ComposedChart data={mlChartData} margin={{ top: 8, right: 20, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
 
@@ -767,30 +887,41 @@ function BatchMLSection({
               <ReferenceArea y1={0.2} y2={0.7} fill="#f59e0b" fillOpacity={0.07} ifOverflow="hidden" />
               <ReferenceArea y1={0.7} y2={1}   fill="#ef4444" fillOpacity={0.07} ifOverflow="hidden" />
 
-              <XAxis
-                dataKey="time"
-                tickFormatter={(v) => `${Number(v).toFixed(0)}s`}
-                stroke="#9ca3af"
-                fontSize={11}
-              />
-              <YAxis
-                domain={[0, 1]}
-                tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}
-                stroke="#9ca3af"
-                fontSize={11}
-              />
+              <XAxis dataKey="time" tickFormatter={(v) => `${Number(v).toFixed(0)}s`} stroke="#9ca3af" fontSize={11} />
+              <YAxis domain={[0, 1]} tickFormatter={(v) => `${(v * 100).toFixed(0)}%`} stroke="#9ca3af" fontSize={11} />
               <Tooltip
-                formatter={(v) => [`${(Number(v) * 100).toFixed(1)}%`, "Ensemble"]}
+                formatter={(v, name) => [`${(Number(v) * 100).toFixed(1)}%`, name]}
                 labelFormatter={(l) => `Time: ${Number(l).toFixed(1)}s`}
               />
+              <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "8px" }} />
+
+              {/* Individual model lines — dashed, behind the ensemble.
+                  Skip dormant models (peak === 0) to keep the chart clean. */}
+              {perModelStats
+                .filter(({ dormant }) => !dormant)
+                .map(({ name, color }) => (
+                  <Line
+                    key={name}
+                    type="monotone"
+                    dataKey={name}
+                    name={name}
+                    stroke={color}
+                    strokeWidth={1.5}
+                    strokeDasharray="4 3"
+                    dot={false}
+                    isAnimationActive={false}
+                  />
+                ))}
+
+              {/* Ensemble — solid area on top */}
               <Area
                 type="monotone"
                 dataKey="ensemble"
                 name="Ensemble"
                 stroke="#8b5cf6"
-                strokeWidth={2}
+                strokeWidth={2.5}
                 fill="#8b5cf6"
-                fillOpacity={0.15}
+                fillOpacity={0.12}
                 dot={false}
                 isAnimationActive={false}
               />

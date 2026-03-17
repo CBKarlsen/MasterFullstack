@@ -8,5 +8,6 @@ in the standard model interface for consistency with ML models.
 
 from .fft_physics import FFTPhysicsModel
 from .random_forest import RandomForestModel
+from .isolation_forest import IsolationForestModel
 
-__all__ = ['FFTPhysicsModel', 'RandomForestModel']
+__all__ = ['FFTPhysicsModel', 'RandomForestModel', 'IsolationForestModel']

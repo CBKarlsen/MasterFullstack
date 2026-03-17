@@ -8,6 +8,7 @@ real data via the /api/models/random_forest/train endpoint the fitted model is
 saved to models/_internal/random_forest.pkl so it survives server restarts.
 """
 
+import warnings
 import numpy as np
 from pathlib import Path
 from typing import Dict, Any, Optional, List
@@ -43,7 +44,13 @@ def _synthetic_clf():
     y = np.array([0] * n + [1] * n)
 
     clf = RandomForestClassifier(n_estimators=100, max_depth=8, random_state=42, n_jobs=1)
-    clf.fit(X, y)
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=".*sklearn.utils.parallel.*",
+            category=UserWarning,
+        )
+        clf.fit(X, y)
     return clf
 
 
@@ -153,10 +160,15 @@ class RandomForestModel(BaseModel):
             random_state=42,
             n_jobs=1,
         )
-        clf.fit(X_train, y_train)
-
-        train_acc = float(accuracy_score(y_train, clf.predict(X_train)))
-        test_acc = float(accuracy_score(y_test, clf.predict(X_test)))
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=".*sklearn.utils.parallel.*",
+                category=UserWarning,
+            )
+            clf.fit(X_train, y_train)
+            train_acc = float(accuracy_score(y_train, clf.predict(X_train)))
+            test_acc = float(accuracy_score(y_test, clf.predict(X_test)))
 
         importances = {f: float(clf.feature_importances_[i]) for i, f in enumerate(self._FEATURES)}
 
@@ -220,6 +232,45 @@ class RandomForestModel(BaseModel):
     # ------------------------------------------------------------------
     # Inference
     # ------------------------------------------------------------------
+
+    def predict_batch(self, features_list: List[Dict[str, Any]]) -> List[PredictionResult]:
+        """
+        Vectorized batch inference — call once with N samples instead of N times.
+        Sklearn RF handles (N, 4) arrays natively; this is ~100x faster than
+        calling predict() in a loop for large datasets.
+        """
+        if self._clf is None or not features_list:
+            return [PredictionResult(probability=0.0, confidence=0.0)] * len(features_list)
+
+        X = np.array([[f.get(feat, 0.0) for feat in self._FEATURES] for f in features_list])
+        importances = self._clf.feature_importances_
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=".*sklearn.utils.parallel.*",
+                category=UserWarning,
+            )
+            probas = self._clf.predict_proba(X)
+
+        results = []
+        for proba in probas:
+            prob = float(proba[1])
+            confidence = float(abs(prob - 0.5) * 2.0)
+            if prob < 0.3:
+                classification = "healthy"
+            elif prob < 0.65:
+                classification = "warning"
+            else:
+                classification = "critical"
+            extras = {f: float(importances[i]) for i, f in enumerate(self._FEATURES)}
+            results.append(PredictionResult(
+                probability=prob,
+                confidence=confidence,
+                classification=classification,
+                extras={"feature_importances": extras},
+            ))
+        return results
 
     def predict(self, features: Dict[str, Any]) -> PredictionResult:
         if self._clf is None:

@@ -11,6 +11,7 @@ import numpy as np
 from typing import Dict, Any, List, Optional
 from .backend import CloggingDetector
 from .dataloader import DataStreamer
+from .models import get_registry, InputType
 
 
 def _sanitize(value):
@@ -25,6 +26,82 @@ def _sanitize(value):
     if isinstance(value, list):
         return [_sanitize(v) for v in value]
     return value
+
+def _apply_batch_ml(timeseries: List[Dict[str, Any]], features_list: List[Dict[str, float]]) -> None:
+    """
+    Run ML inference once over all analysis points in one vectorised call per model.
+
+    Models that expose ``predict_batch()`` (e.g. sklearn RF) process the full
+    feature matrix in a single call — orders of magnitude faster than calling
+    ``predict()`` 200k+ times individually.  Other models fall back to a plain
+    Python loop (still skipping the per-sample overhead from process_sample).
+    """
+    if not features_list:
+        return
+
+    registry = get_registry()
+    active_models = registry.get_active()
+    if not active_models:
+        return
+
+    # Build per-model probability arrays
+    n = len(features_list)
+    model_pred_rows: Dict[str, List[Dict[str, Any]]] = {}
+
+    for name, model in active_models.items():
+        try:
+            if hasattr(model, "predict_batch") and callable(model.predict_batch):
+                # Vectorized path (e.g. sklearn RandomForest)
+                batch_results = model.predict_batch(features_list)
+                model_pred_rows[name] = [
+                    {**r.to_dict(), "weight": model.metadata.weight}
+                    for r in batch_results
+                ]
+            else:
+                # Sequential fallback for models that don't support batching
+                model_pred_rows[name] = [
+                    {**model.predict(f).to_dict(), "weight": model.metadata.weight}
+                    for f in features_list
+                ]
+        except Exception as exc:
+            model_pred_rows[name] = [
+                {"probability": 0.0, "confidence": 0.0,
+                 "weight": model.metadata.weight, "error": str(exc)}
+            ] * n
+
+    # Write ML results back into timeseries analysis points
+    analysis_indices = [i for i, p in enumerate(timeseries) if p.get("phase") == "analysis"]
+
+    for j, ts_idx in enumerate(analysis_indices):
+        if j >= n:
+            break
+
+        models_at_j: Dict[str, Any] = {
+            name: preds[j] for name, preds in model_pred_rows.items()
+        }
+
+        # Weighted ensemble (mirrors CloggingDetector._calculate_ensemble)
+        probs, weights = [], []
+        for r in models_at_j.values():
+            prob = r.get("probability", 0.0)
+            conf = r.get("confidence", 1.0)
+            wt   = r.get("weight", 1.0)
+            if "error" not in r and prob > 0:
+                probs.append(prob)
+                weights.append(conf * wt)
+
+        if probs:
+            total = sum(weights)
+            ensemble = (
+                sum(p * w for p, w in zip(probs, weights)) / total
+                if total > 0 else float(np.mean(probs))
+            )
+        else:
+            ensemble = 0.0
+
+        timeseries[ts_idx]["models"] = models_at_j
+        timeseries[ts_idx]["ensemble_probability"] = ensemble
+
 
 def run_batch_analysis(
     filepath: str,
@@ -82,8 +159,9 @@ def run_batch_analysis(
         calibration_samples = max(int(calibration_seconds * actual_fs), 50)
     print(f"Batch analysis using fs={actual_fs} Hz, calibration={len(calibration_buffer)} samples ({calibration_seconds}s)")
 
-    # Now create detector with correct fs
-    detector = CloggingDetector(fs=actual_fs, window_sec=window_sec, sigma=sigma)
+    # Now create detector with correct fs.
+    # enable_models=False skips per-sample ML inference; we batch-predict at the end.
+    detector = CloggingDetector(fs=actual_fs, window_sec=window_sec, sigma=sigma, enable_models=False)
 
     if len(calibration_buffer) < 50:
         return {
@@ -113,7 +191,9 @@ def run_batch_analysis(
             "phase": "calibration",
         })
 
-    # Now process the rest
+    # Now process the rest — ML is disabled per-sample, features collected for batch inference
+    collected_features: List[Dict[str, float]] = []  # parallel to analysis entries in timeseries
+
     for data_point in streamer:
         t = data_point.get("time", 0.0)
         flow = data_point.get("flow", 0.0)
@@ -135,15 +215,23 @@ def run_batch_analysis(
                 "spectral_slope": results.get("spectral_slope", 0.0),
                 "traffic_light": results.get("light_color", "gray"),
                 "light_msg": results.get("status_msg", ""),
-                "ensemble_probability": results.get("ensemble_probability", 0.0),
-                "models": results.get("models", {}),
+                "ensemble_probability": 0.0,
+                "models": {},
                 "raw": _sanitize(raw_data),
                 "phase": "analysis",
             })
-            
+            collected_features.append(results.get("_features", {
+                "static_score": results.get("static", 0.0),
+                "composite_score": results.get("composite", 0.0),
+                "turbulence_score": results.get("turbulence", 0.0),
+                "spectral_slope": results.get("spectral_slope", 0.0),
+            }))
 
     analysis_points = [p for p in timeseries if p["phase"] == "analysis"]
     print(f"Batch complete: {len(timeseries)} total, {len(analysis_points)} analysis points")
+
+    # --- Batch ML inference (single vectorized call per model, much faster) ---
+    _apply_batch_ml(timeseries, collected_features)
     print(f"  Composite range: {min(p['composite_score'] for p in analysis_points) if analysis_points else 'N/A'} - {max(p['composite_score'] for p in analysis_points) if analysis_points else 'N/A'}")
     # Build response
     duration = timeseries[-1]["time"] if timeseries else 0.0

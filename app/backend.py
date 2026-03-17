@@ -16,6 +16,7 @@ CHANGES:
 """
 
 import collections
+import math
 import numpy as np
 from collections import deque
 from typing import Dict, Any, Optional, List
@@ -36,7 +37,7 @@ class CloggingDetector:
     """
 
     def __init__(self, fs: float = 20.0, window_sec: float = 10.0,
-                 sigma: float = 3.0):
+                 sigma: float = 3.0, enable_models: bool = True):
         """
         Initialize the clogging detector.
 
@@ -79,6 +80,7 @@ class CloggingDetector:
 
         # Model registry integration
         self._registry = None
+        self._enable_models = enable_models
 
         # Sequence buffer manager for LSTM/sequence models
         self._sequence_manager = MultiModelSequenceManager()
@@ -162,11 +164,11 @@ class CloggingDetector:
         # look like, then set the threshold at mean + sigma * std.
         baseline_composites = []
         window_size = self.window_size
-        step = int(window_size / 2)  # 50% overlap
+        step = max(1, window_size // 20)  # ~5% step → ~20x more windows than 50% overlap
 
         spectra_list = []
 
-        for i in range(0, len(baseline_data) - window_size, step):
+        for i in range(0, len(baseline_data) - window_size + 1, step):
             segment = np.array(baseline_data[i: i + window_size])
 
             # FFT composite (same logic as process_sample)
@@ -177,9 +179,8 @@ class CloggingDetector:
             nyquist = self.fs / 2.0
             split_freq = min(1.0, nyquist / 4.0)  # Split at 25% of Nyquist
             split_idx = max(2, np.searchsorted(freqs, split_freq))  # At least 2 bins in low band
-            low = np.sum(fft_power[:split_idx])
-            high = np.sum(fft_power[split_idx:])
-            composite_val = high / low if low > 1e-10 else 0.0
+            total = np.sum(fft_power)
+            composite_val = np.sum(fft_power[split_idx:]) / total if total > 1e-10 else 0.0
             baseline_composites.append(composite_val)
 
             # Also build spectral fingerprint
@@ -263,10 +264,9 @@ class CloggingDetector:
         nyquist = self.fs / 2.0
         split_freq = min(1.0, nyquist / 4.0)
         split_idx = max(2, np.searchsorted(freqs, split_freq))
-        low = np.sum(fft_power[:split_idx])
-        high = np.sum(fft_power[split_idx:])
-        composite_val = high / low if low > 1e-10 else 0.0
-        results['composite'] = composite_val + 1e-6
+        total_power = np.sum(fft_power)
+        composite_val = np.sum(fft_power[split_idx:]) / total_power if total_power > 1e-10 else 0.0
+        results['composite'] = composite_val
 
         # =====================================================================
         # 4. TURBULENCE METHOD (Detrended FFT)
@@ -274,9 +274,8 @@ class CloggingDetector:
         detrended = raw_signal - curr_mean
         detrended = detrended * np.hamming(len(detrended))
         fft_pure = np.abs(np.fft.rfft(detrended)) ** 2
-        low_pure = np.sum(fft_pure[1:split_idx])
-        high_pure = np.sum(fft_pure[split_idx:])
-        results['turbulence'] = high_pure / low_pure if low_pure > 1e-10 else 0.0
+        total_pure = np.sum(fft_pure[1:])
+        results['turbulence'] = np.sum(fft_pure[split_idx:]) / total_pure if total_pure > 1e-10 else 0.0
 
         # =====================================================================
         # 5. ADVANCED PHYSICS & PREDICTION (Calibrated)
@@ -305,16 +304,23 @@ class CloggingDetector:
                 'turbulence_score': results['turbulence'],
                 'spectral_slope': slope_val,
             }
+            # Always expose features so batch.py can collect them without re-computing
+            results['_features'] = features
 
-            self._sequence_manager.add_features(features)
-            model_results = self._run_all_models(features)
-            results['models'] = model_results
-            results['ensemble_probability'] = self._calculate_ensemble(model_results)
+            if self._enable_models:
+                self._sequence_manager.add_features(features)
+                model_results = self._run_all_models(features)
+                results['models'] = model_results
+                results['ensemble_probability'] = self._calculate_ensemble(model_results)
 
-            if 'fft_physics' in model_results:
-                results['ml_probability'] = model_results['fft_physics'].get('probability', 0.0)
+                if 'fft_physics' in model_results:
+                    results['ml_probability'] = model_results['fft_physics'].get('probability', 0.0)
+                else:
+                    results['ml_probability'] = results['ensemble_probability']
             else:
-                results['ml_probability'] = results['ensemble_probability']
+                results['models'] = {}
+                results['ensemble_probability'] = 0.0
+                results['ml_probability'] = 0.0
 
         else:
             results['spectral_slope'] = 0.0
