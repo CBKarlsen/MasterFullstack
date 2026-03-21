@@ -18,9 +18,18 @@ CHANGES:
 import collections
 import math
 import numpy as np
-from collections import deque
 from typing import Dict, Any, Optional, List
 from sklearn.linear_model import LinearRegression
+
+
+def _sigma_to_pct(sigma: float) -> float:
+    """Map sigma to a one-tailed normal percentile, capped at 99.9."""
+    return min(99.9, 100.0 * (0.5 * (1.0 + math.erf(sigma / math.sqrt(2.0)))))
+
+
+def _normalize_spectrum(spectrum: np.ndarray) -> np.ndarray:
+    """Normalize a power spectrum to unit sum (safe against zero-energy windows)."""
+    return spectrum / (np.sum(spectrum) + 1e-10)
 
 from .models import get_registry, InputType
 from .models.sequence_buffer import MultiModelSequenceManager
@@ -37,7 +46,8 @@ class CloggingDetector:
     """
 
     def __init__(self, fs: float = 20.0, window_sec: float = 10.0,
-                 sigma: float = 3.0, enable_models: bool = True):
+                 sigma: float = 3.0, enable_models: bool = True,
+                 baseline_adapt_minutes: float = 5.0):
         """
         Initialize the clogging detector.
 
@@ -54,15 +64,23 @@ class CloggingDetector:
         # Sigma multiplier (configurable)
         self.sigma = sigma
 
+        # Adaptive baseline: EMA time constant in samples.
+        # alpha = 1 / (fs * 60 * adapt_minutes). Only updates when signal is healthy.
+        adapt_samples = self.fs * 60.0 * baseline_adapt_minutes
+        self._baseline_alpha = 1.0 / max(adapt_samples, 1.0)
+
         # Calibration state
         self.is_calibrated = False
         self.baseline_mean = 0.0
         self.baseline_std = 0.0
         self.baseline_spectrum = None
+        self.baseline_spectrum_norm = None
 
-        # Baseline composite stats (for sigma-based FFT threshold)
+        # Baseline composite stats (for percentile-based FFT threshold)
         self.baseline_composite_mean = 0.0
         self.baseline_composite_std = 0.0
+        self.baseline_composites: np.ndarray = np.array([])
+        self._sorted_composites: np.ndarray = np.array([])  # pre-sorted for O(1) percentile
         self.baseline_static_mean = 0.0
         self.baseline_static_std = 0.0
 
@@ -124,19 +142,19 @@ class CloggingDetector:
 
     def _recalculate_thresholds(self):
         """Recalculate all thresholds from stored baseline stats + current sigma."""
-        # Static threshold: baseline_mean + sigma * baseline_std of dP
+        # Static threshold: sigma * std of raw signal (Gaussian-appropriate)
         self.critical_threshold = self.sigma * self.baseline_std
 
-        # FFT/Composite threshold: baseline composite mean + sigma * composite std
-        if self.baseline_composite_std > 0:
-            self.fft_threshold = (self.baseline_composite_mean
-                                  + self.sigma * self.baseline_composite_std)
+        # Composite threshold: percentile-based (distribution-free).
+        # sigma maps to a one-tailed normal percentile so the UI knob stays intuitive:
+        #   sigma=2 → 97.7th pct,  sigma=3 → 99.9th pct,  sigma=4 → 99.997th pct
+        if len(self._sorted_composites) > 0:
+            pct = _sigma_to_pct(self.sigma)
+            self.fft_threshold = float(np.percentile(self._sorted_composites, pct))
         elif self.baseline_composite_mean > 0:
-            # No variance in baseline — use multiplier of mean
-            self.fft_threshold = self.baseline_composite_mean * (1.0 + self.sigma)
+            self.fft_threshold = self.baseline_composite_mean * (1.0 + self.sigma * 0.1)
         else:
-            # No composite data at all — use relative fallback
-            self.fft_threshold = 0.05
+            self.fft_threshold = 0.8  # safe fallback for normalized [0,1] score
 
         print(f"Thresholds recalculated (σ={self.sigma:.1f}): "
               f"Static={self.critical_threshold:.5f}, "
@@ -158,44 +176,51 @@ class CloggingDetector:
         self.baseline_mean = np.mean(baseline_data)
         self.baseline_std = np.std(baseline_data)
 
-        # --- Compute baseline composite scores from calibration windows ---
-        # This is the key fix: we run the same FFT composite calculation on
-        # the calibration data to establish what "normal" composite values
-        # look like, then set the threshold at mean + sigma * std.
-        baseline_composites = []
+        # --- Compute baseline spectrum and composite scores ---
+        # Pass 1: collect all FFT spectra from calibration windows.
+        # Pass 2: compute composite as L1 spectral distance from the mean baseline
+        # spectrum. This makes the score relative to THIS file's own operating
+        # conditions, so files with naturally different spectral shapes don't
+        # produce false positives against a threshold calibrated on another file.
         window_size = self.window_size
-        step = max(1, window_size // 20)  # ~5% step → ~20x more windows than 50% overlap
+        step = max(1, window_size // 20)  # ~5% step → many windows from short calibration
 
         spectra_list = []
+        freqs = np.fft.rfftfreq(window_size, d=1 / self.fs)
 
         for i in range(0, len(baseline_data) - window_size + 1, step):
             segment = np.array(baseline_data[i: i + window_size])
-
-            # FFT composite (same logic as process_sample)
-            ham_signal = segment * np.hamming(len(segment))
+            ham_signal = segment * np.hamming(window_size)
             fft_power = np.abs(np.fft.rfft(ham_signal)) ** 2
-            freqs = np.fft.rfftfreq(len(ham_signal), 1 / self.fs)
-
-            nyquist = self.fs / 2.0
-            split_freq = min(1.0, nyquist / 4.0)  # Split at 25% of Nyquist
-            split_idx = max(2, np.searchsorted(freqs, split_freq))  # At least 2 bins in low band
-            total = np.sum(fft_power)
-            composite_val = np.sum(fft_power[split_idx:]) / total if total > 1e-10 else 0.0
-            baseline_composites.append(composite_val)
-
-            # Also build spectral fingerprint
             spectra_list.append(fft_power)
 
-        # Store baseline composite statistics
-        if baseline_composites:
+        if spectra_list:
+            spectra_array = np.array(spectra_list)                    # (n_windows, n_bins)
+            mean_spectrum = np.mean(spectra_array, axis=0)
+            baseline_norm = _normalize_spectrum(mean_spectrum)
+
+            # Vectorised L1 distances — no Python loop over windows.
+            spec_sums = np.sum(spectra_array, axis=1, keepdims=True)  # (n_windows, 1)
+            spectra_norm = spectra_array / (spec_sums + 1e-10)        # (n_windows, n_bins)
+            baseline_composites = np.sum(np.abs(spectra_norm - baseline_norm), axis=1)
+
+            self.baseline_spectrum = mean_spectrum
+            self.baseline_spectrum_norm = baseline_norm
+            self.baseline_freqs = freqs
+            self.baseline_composites = baseline_composites
+            self._sorted_composites = np.sort(baseline_composites)    # cached for fast percentile
             self.baseline_composite_mean = float(np.mean(baseline_composites))
             self.baseline_composite_std = float(np.std(baseline_composites))
         else:
+            self.baseline_spectrum = None
+            self.baseline_spectrum_norm = None
+            self.baseline_composites = np.array([])
+            self._sorted_composites = np.array([])
             self.baseline_composite_mean = 0.0
             self.baseline_composite_std = 0.0
 
         # Store baseline static statistics
-        self.baseline_static_mean = 0.0  # deviation from mean is ~0 at baseline
+        self.baseline_static_mean = 0.0
         self.baseline_static_std = self.baseline_std
 
         self.is_calibrated = True
@@ -203,18 +228,13 @@ class CloggingDetector:
         # Calculate thresholds using current sigma
         self._recalculate_thresholds()
 
-        print(f"Calibrated! Baseline composite: "
+        print(f"Calibrated! Baseline composite (L1 spectral distance): "
               f"mean={self.baseline_composite_mean:.6f}, "
-              f"std={self.baseline_composite_std:.6f}")
+              f"std={self.baseline_composite_std:.6f}, "
+              f"n_windows={len(spectra_list)}")
         print(f"  → fft_threshold (σ={self.sigma}): {self.fft_threshold:.6f}")
-
-        # Build baseline spectrum fingerprint
         if spectra_list:
-            self.baseline_spectrum = np.mean(spectra_list, axis=0)
-            self.baseline_freqs = np.fft.rfftfreq(window_size, d=1 / self.fs)
             print("Spectral Fingerprint Calibrated!")
-        else:
-            self.baseline_spectrum = None
 
     def process_sample(self, pressure_val: float, time_sec: float) -> Optional[Dict[str, Any]]:
         """
@@ -259,13 +279,35 @@ class CloggingDetector:
         results['raw_spectrum'] = fft_power[mask_vis].tolist()
 
         # =====================================================================
-        # 3. COMPOSITE METHOD (Spectral Energy Ratio)
+        # 3. COMPOSITE METHOD (L1 spectral distance from baseline shape)
+        # When calibrated: measures how much the current spectral shape deviates
+        # from the file's own baseline — normalised per-file, no cross-file bias.
+        # Before calibration: falls back to high-band energy fraction.
         # =====================================================================
         nyquist = self.fs / 2.0
         split_freq = min(1.0, nyquist / 4.0)
         split_idx = max(2, np.searchsorted(freqs, split_freq))
         total_power = np.sum(fft_power)
-        composite_val = np.sum(fft_power[split_idx:]) / total_power if total_power > 1e-10 else 0.0
+
+        current_norm = _normalize_spectrum(fft_power)
+
+        if self.is_calibrated and self.baseline_spectrum_norm is not None:
+            composite_val = float(np.sum(np.abs(current_norm - self.baseline_spectrum_norm)))
+
+            # Adaptive baseline: slowly track long-term spectral drift so that
+            # gradual healthy changes (temperature, viscosity, pump warm-up) don't
+            # accumulate into false positives hours later.
+            # Only adapt when the signal is clearly healthy (score well below threshold)
+            # so actual clogging events don't corrupt the reference.
+            # Both arrays sum to 1, so their weighted average also sums to 1 — no re-norm needed.
+            if composite_val < self.fft_threshold * 0.4:
+                self.baseline_spectrum_norm = (
+                    (1.0 - self._baseline_alpha) * self.baseline_spectrum_norm
+                    + self._baseline_alpha * current_norm
+                )
+        else:
+            composite_val = np.sum(fft_power[split_idx:]) / total_power if total_power > 1e-10 else 0.0
+
         results['composite'] = composite_val
 
         # =====================================================================
@@ -454,7 +496,7 @@ class CloggingDetector:
             return "gray", "Initializing..."
 
         CRITICAL_LIMIT = self.fft_threshold
-        WARNING_LEVEL = CRITICAL_LIMIT * 0.2
+        WARNING_LEVEL = CRITICAL_LIMIT * 0.7
 
         if current_score < WARNING_LEVEL:
             return "green", "System Stable"

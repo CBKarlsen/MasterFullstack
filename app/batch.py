@@ -7,9 +7,10 @@ and returns the complete result set. Used for post-hoc analysis where you
 want to see the full picture and tweak parameters like sigma.
 """
 
+import math
 import numpy as np
 from typing import Dict, Any, List, Optional
-from .backend import CloggingDetector
+from .backend import CloggingDetector, _sigma_to_pct
 from .dataloader import DataStreamer
 from .models import get_registry, InputType
 
@@ -257,6 +258,7 @@ def run_batch_analysis(
             "baseline_std": detector.baseline_std,
             "composite_mean": detector.baseline_composite_mean,
             "composite_std": detector.baseline_composite_std,
+            "composite_p99": float(np.percentile(detector.baseline_composites, 99)) if len(detector.baseline_composites) > 0 else None,
             "samples_used": calibration_samples,
         },
         "thresholds": {
@@ -278,25 +280,31 @@ def recompute_thresholds(
     composite_std: float,
     baseline_std: float,
     sigma: float,
+    composite_p99: float = None,
 ) -> Dict[str, float]:
     """
     Recompute thresholds from stored calibration stats without re-running analysis.
 
-    This allows the frontend to instantly show new threshold lines
-    when the user changes sigma.
+    Uses percentile-based threshold for composite (matching CloggingDetector),
+    falling back to mean+sigma*std only when the percentile is unavailable.
 
     Args:
         composite_mean: Baseline composite mean (from calibration response).
         composite_std: Baseline composite std (from calibration response).
         baseline_std: Baseline signal std (from calibration response).
         sigma: New sigma value.
+        composite_p99: 99th-percentile composite from calibration (preferred).
 
     Returns:
         Dict with new threshold values.
     """
-    fft_threshold = composite_mean + sigma * composite_std
-    if composite_std <= 0:
-        fft_threshold = max(0.05, composite_mean * 5.0)
+    if composite_p99 is not None:
+        pct = _sigma_to_pct(sigma)
+        fft_threshold = composite_mean + (composite_p99 - composite_mean) * (pct / 99.0)
+    elif composite_std > 0:
+        fft_threshold = composite_mean + sigma * composite_std
+    else:
+        fft_threshold = max(0.05, composite_mean * (1.0 + sigma * 0.1))
 
     static_threshold = sigma * baseline_std
 

@@ -34,7 +34,7 @@ cd frontend && npm run lint
 
 ### Data Flow
 1. User selects a CSV/XLSX file with columns: time, flow, p_in, p_out
-2. **Calibration phase** (~400 samples / 20s of healthy baseline data) establishes sigma-based thresholds: `fft_threshold = baseline_mean + sigma * std`
+2. **Calibration phase** (~400 samples / 20s of healthy baseline data) builds a baseline spectral fingerprint and sets thresholds via `fft_threshold = percentile(baseline_composites, sigma_to_pct(sigma))` — percentile-based, not Gaussian
 3. **Real-time simulation**: WebSocket streams samples; backend computes static/composite/turbulence scores and spectral slope per sample, but sends only every 10th frame (~2Hz effective rate)
 4. Active ML models receive `[static_score, composite_score, turbulence_score, spectral_slope]` and output clogging probability
 5. Dashboard updates charts, traffic light (green/yellow/red), and ETA to failure
@@ -97,16 +97,21 @@ To implement a custom model, subclass `BaseModel` from `app/models/base.py`. Req
 
 **Scoring methods in `backend.py` (`CloggingDetector`):**
 - **Static**: `abs(current_window_mean - baseline_mean)`
-- **Composite**: `high_energy / low_energy` FFT ratio, split at 25% of Nyquist. Ratio > 0.05 signals anomaly
-- **Turbulence**: Detrended FFT with Hamming window applied
-- **Spectral slope**: Log-log linear fit on 1–50 Hz band. Healthy pipe: −2.5 to −3.0 (Kolmogorov cascade); clogged: −1.0 to −1.5 (white noise)
+- **Composite**: L1 distance between normalised current power spectrum and normalised baseline spectrum fingerprint. Score ≈ 0 for healthy, rises as spectral shape deviates. Baseline adapts slowly via EMA (default τ=5 min) to track long-term drift, but only when score < 40% of threshold.
+- **Turbulence**: Detrended FFT (DC removed) with Hamming window; high-band energy fraction of detrended signal
+- **Spectral slope**: Log-log linear fit on 1–Nyquist Hz band. Healthy pipe: −2.5 to −3.0 (Kolmogorov cascade); clogged: −1.0 to −1.5 (white noise)
 - **ETA**: Log-linear regression on last 150 composite values; unreliable when trend slope ≤ 0
+- **Traffic light** turns non-green at 70% of threshold (not 20%)
+
+**Module-level helpers in `backend.py`:**
+- `_sigma_to_pct(sigma)` — maps sigma to a normal CDF percentile (capped at 99.9); shared with `batch.py`
+- `_normalize_spectrum(spectrum)` — safe unit-sum normalisation (`/ (sum + 1e-10)`)
 
 **Frontend message batching (`useWebSocket.ts`):** Incoming WebSocket messages are buffered and flushed once per `requestAnimationFrame` (~60Hz). React state only updates with the latest buffered message, preventing re-render thrashing at 20Hz wire rate.
 
 **`DataStreamer` auto-detection:** Sampling rate inferred from median of first 100 time-column deltas. Handles European decimals (comma → dot). Extracts ALL numeric columns into a `raw` dict that passes through the entire pipeline to the frontend, enabling visualization of arbitrary sensor channels beyond flow/pressure.
 
-**Sigma recalculation:** Changing sigma mid-stream immediately recalculates all thresholds from stored baseline statistics — no re-calibration or re-processing needed.
+**Sigma recalculation:** Changing sigma mid-stream immediately recalculates all thresholds using `np.percentile` on the pre-sorted `_sorted_composites` array — O(1) lookup, no re-calibration or re-processing needed.
 
 **Registry singleton:** `get_registry(models_dir)` returns a single instance. The built-in FFT physics model is registered at startup. Hot-reload background thread polls every 5s.
 
