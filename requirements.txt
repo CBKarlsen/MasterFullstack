@@ -8,6 +8,7 @@ python-multipart  # For file uploads
 numpy
 pandas
 openpyxl  # Excel file support
+PyWavelets  # Discrete wavelet transform (DWT) for wavelet-based clogging detection
 
 # Machine learning - core
 scikit-learn

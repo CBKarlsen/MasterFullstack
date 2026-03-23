@@ -21,6 +21,12 @@ import numpy as np
 from typing import Dict, Any, Optional, List
 from sklearn.linear_model import LinearRegression
 
+try:
+    import pywt as _pywt
+    _PYWT_AVAILABLE = True
+except ImportError:
+    _PYWT_AVAILABLE = False
+
 
 def _sigma_to_pct(sigma: float) -> float:
     """Map sigma to a one-tailed normal percentile, capped at 99.9."""
@@ -84,6 +90,25 @@ class CloggingDetector:
         self.baseline_static_mean = 0.0
         self.baseline_static_std = 0.0
 
+        # Wavelet detection state (DWT log-energy z-scores)
+        self._wavelet_name = 'db4'
+        self._wavelet_level = 4
+        self._wavelet_log_mean: Optional[np.ndarray] = None   # (4,) mean log-energy per detail level
+        self._wavelet_log_std: Optional[np.ndarray] = None    # (4,) std log-energy per detail level
+        self._sorted_wavelet_composites: np.ndarray = np.array([])
+        self.baseline_wavelet_mean: float = 0.0
+        self.wavelet_threshold: float = 2.0  # fallback (sensible z-score default)
+        # EMA smoothing for wavelet log-energies.
+        # Calibration updates EMA once per window, spaced step=window_size//20 samples apart.
+        # Analysis updates EMA every sample (window slides by 1).
+        # To keep the same time constant in samples, analysis alpha = calibration alpha / step.
+        #   Calibration: alpha=0.05/window → time constant = 1/0.05 windows = 20 windows = 200 samples
+        #   Analysis:    alpha=0.005/sample → time constant = 1/0.005 samples = 200 samples  ✓
+        self._wavelet_ema: Optional[np.ndarray] = None
+        self._wavelet_ema_alpha: float = 0.05          # per-window, used in calibration
+        _step = max(1, self.window_size // 20)
+        self._wavelet_ema_alpha_analysis: float = self._wavelet_ema_alpha / _step  # per-sample
+
         # Thresholds (computed during calibration)
         self.critical_threshold = 0.0
         self.fft_threshold = 0.05  # fallback default
@@ -142,6 +167,8 @@ class CloggingDetector:
 
     def _recalculate_thresholds(self):
         """Recalculate all thresholds from stored baseline stats + current sigma."""
+        pct = _sigma_to_pct(self.sigma)
+
         # Static threshold: sigma * std of raw signal (Gaussian-appropriate)
         self.critical_threshold = self.sigma * self.baseline_std
 
@@ -149,16 +176,24 @@ class CloggingDetector:
         # sigma maps to a one-tailed normal percentile so the UI knob stays intuitive:
         #   sigma=2 → 97.7th pct,  sigma=3 → 99.9th pct,  sigma=4 → 99.997th pct
         if len(self._sorted_composites) > 0:
-            pct = _sigma_to_pct(self.sigma)
             self.fft_threshold = float(np.percentile(self._sorted_composites, pct))
         elif self.baseline_composite_mean > 0:
             self.fft_threshold = self.baseline_composite_mean * (1.0 + self.sigma * 0.1)
         else:
             self.fft_threshold = 0.8  # safe fallback for normalized [0,1] score
 
+        # Wavelet threshold: same percentile approach (z-score space)
+        if len(self._sorted_wavelet_composites) > 0:
+            self.wavelet_threshold = float(np.percentile(self._sorted_wavelet_composites, pct))
+        elif self.baseline_wavelet_mean > 0:
+            self.wavelet_threshold = self.baseline_wavelet_mean + self.sigma * 0.5
+        else:
+            self.wavelet_threshold = 2.0   # ~2 sigma for a half-normal, sensible z-score fallback
+
         print(f"Thresholds recalculated (σ={self.sigma:.1f}): "
               f"Static={self.critical_threshold:.5f}, "
-              f"Composite={self.fft_threshold:.5f}")
+              f"Composite={self.fft_threshold:.5f}, "
+              f"Wavelet={self.wavelet_threshold:.5f}")
 
     def calibrate(self, baseline_data: List[float]) -> None:
         """
@@ -186,6 +221,7 @@ class CloggingDetector:
         step = max(1, window_size // 20)  # ~5% step → many windows from short calibration
 
         spectra_list = []
+        wavelet_energies_list = []
         freqs = np.fft.rfftfreq(window_size, d=1 / self.fs)
 
         for i in range(0, len(baseline_data) - window_size + 1, step):
@@ -193,6 +229,11 @@ class CloggingDetector:
             ham_signal = segment * np.hamming(window_size)
             fft_power = np.abs(np.fft.rfft(ham_signal)) ** 2
             spectra_list.append(fft_power)
+
+            # DWT energy per decomposition level
+            if _PYWT_AVAILABLE:
+                coeffs = _pywt.wavedec(segment, self._wavelet_name, level=self._wavelet_level)
+                wavelet_energies_list.append(np.array([np.sum(c ** 2) for c in coeffs]))
 
         if spectra_list:
             spectra_array = np.array(spectra_list)                    # (n_windows, n_bins)
@@ -219,6 +260,50 @@ class CloggingDetector:
             self.baseline_composite_mean = 0.0
             self.baseline_composite_std = 0.0
 
+        # --- Wavelet baseline (per-level log-energy z-scores) ---
+        # wavelet_energies_list contains [cA4, cD4, cD3, cD2, cD1] energies per window.
+        # We discard cA4 (approximation = DC-like, very stable, not sensitive to clogging)
+        # and keep only the detail coefficients [cD4, cD3, cD2, cD1].
+        # Score = mean |z_i| where z_i = (EMA(log E_i) - mu_i) / sigma_i.
+        # This fixes two issues with the old normalized-distribution approach:
+        #   1. Each band is normalized by its own calibration sigma → noisy bands (cD4)
+        #      contribute no more than stable bands (cD1).
+        #   2. Absolute energy increases are detected even if all bands rise proportionally
+        #      (log-energy increases when absolute energy increases).
+        if wavelet_energies_list:
+            wv_array = np.array(wavelet_energies_list)    # (n_windows, 5)
+            detail_array = wv_array[:, 1:]                # drop cA4 → (n_windows, 4)
+            log_detail = np.log(detail_array + 1e-10)     # (n_windows, 4) log-space
+
+            _wavelet_log_mean = np.mean(log_detail, axis=0)                            # (4,)
+            _wavelet_log_std = np.maximum(np.std(log_detail, axis=0), 1e-6)            # (4,) guarded
+
+            # Simulate EMA through calibration windows (warm-started at mean → no transient)
+            alpha = self._wavelet_ema_alpha
+            ema_state = _wavelet_log_mean.copy()
+            ema_composites = []
+            for row in log_detail:
+                ema_state = (1.0 - alpha) * ema_state + alpha * row
+                z = (ema_state - _wavelet_log_mean) / _wavelet_log_std
+                ema_composites.append(float(np.mean(np.abs(z))))
+
+            self._wavelet_log_mean = _wavelet_log_mean
+            self._wavelet_log_std = _wavelet_log_std
+            self._sorted_wavelet_composites = np.sort(np.array(ema_composites))
+            self.baseline_wavelet_mean = float(np.mean(ema_composites))
+            self._wavelet_ema = _wavelet_log_mean.copy()   # warm-start analysis EMA → score=0 at start
+
+            print(f"[Wavelet] Baseline (log-energy z-score): "
+                  f"mean_score={self.baseline_wavelet_mean:.4f}, "
+                  f"log_mean={np.round(_wavelet_log_mean, 2).tolist()}")
+        else:
+            self._wavelet_log_mean = None
+            self._wavelet_log_std = None
+            self._sorted_wavelet_composites = np.array([])
+            self.baseline_wavelet_mean = 0.0
+            self._wavelet_ema = None
+            print("[Wavelet] WARNING: no wavelet energies computed during calibration")
+
         # Store baseline static statistics
         self.baseline_static_mean = 0.0
         self.baseline_static_std = self.baseline_std
@@ -233,8 +318,9 @@ class CloggingDetector:
               f"std={self.baseline_composite_std:.6f}, "
               f"n_windows={len(spectra_list)}")
         print(f"  → fft_threshold (σ={self.sigma}): {self.fft_threshold:.6f}")
-        if spectra_list:
-            print("Spectral Fingerprint Calibrated!")
+        if self._wavelet_log_mean is not None:
+            print(f"  → wavelet_threshold (σ={self.sigma}): {self.wavelet_threshold:.6f} "
+                  f"(baseline_mean={self.baseline_wavelet_mean:.6f})")
 
     def process_sample(self, pressure_val: float, time_sec: float) -> Optional[Dict[str, Any]]:
         """
@@ -320,7 +406,12 @@ class CloggingDetector:
         results['turbulence'] = np.sum(fft_pure[split_idx:]) / total_pure if total_pure > 1e-10 else 0.0
 
         # =====================================================================
-        # 5. ADVANCED PHYSICS & PREDICTION (Calibrated)
+        # 5. WAVELET METHOD (DWT detail-energy distribution shift)
+        # =====================================================================
+        results['wavelet'] = self.calculate_wavelet_score(raw_signal)
+
+        # =====================================================================
+        # 6. ADVANCED PHYSICS & PREDICTION (Calibrated)
         # =====================================================================
         if self.is_calibrated:
             # A. Spectral Slope
@@ -335,16 +426,18 @@ class CloggingDetector:
             # C. Current thresholds (so frontend always has latest)
             results['fft_threshold'] = self.fft_threshold
             results['static_threshold'] = self.critical_threshold
+            results['wavelet_threshold'] = self.wavelet_threshold
             results['current_sigma'] = self.sigma
 
             # =====================================================================
-            # 6. MULTI-MODEL PREDICTIONS
+            # 7. MULTI-MODEL PREDICTIONS
             # =====================================================================
             features = {
                 'static_score': results['static'],
                 'composite_score': results['composite'],
                 'turbulence_score': results['turbulence'],
                 'spectral_slope': slope_val,
+                'wavelet_score': results['wavelet'],
             }
             # Always expose features so batch.py can collect them without re-computing
             results['_features'] = features
@@ -373,6 +466,7 @@ class CloggingDetector:
             results['ensemble_probability'] = 0.0
             results['fft_threshold'] = self.fft_threshold
             results['static_threshold'] = self.critical_threshold
+            results['wavelet_threshold'] = self.wavelet_threshold
             results['current_sigma'] = self.sigma
 
         # Store history for trend analysis
@@ -435,6 +529,46 @@ class CloggingDetector:
         if total_weight > 0:
             return sum(p * w for p, w in zip(probabilities, weights)) / total_weight
         return float(np.mean(probabilities))
+
+    def calculate_wavelet_score(self, signal: np.ndarray) -> float:
+        """
+        Wavelet per-level log-energy z-score (db4, level 4).
+
+        Score = mean |z_i| where z_i = (EMA(log E_i) - mu_i) / sigma_i
+        and mu_i, sigma_i come from the calibration baseline log-energies.
+
+        Advantages over the old normalized-distribution approach:
+        - Each band normalized by its own sigma → noisy cD4 doesn't dominate.
+        - Detects absolute energy increases (all bands rise equally → detected).
+        - EMA warm-started at calibration mean → score starts at 0, no transient.
+
+        Score ≈ 0  → log-energies match calibration baseline (healthy).
+        Score >> 1 → one or more levels deviate significantly (anomaly).
+
+        Returns 0.0 if pywt is unavailable or the detector is not calibrated.
+        """
+        if not _PYWT_AVAILABLE or not self.is_calibrated or self._wavelet_log_mean is None:
+            return 0.0
+        try:
+            coeffs = _pywt.wavedec(signal, self._wavelet_name, level=self._wavelet_level)
+            # coeffs = [cA4, cD4, cD3, cD2, cD1] — drop approximation, keep details
+            detail_energies = np.array([np.sum(c ** 2) for c in coeffs[1:]])
+            total = np.sum(detail_energies)
+            if total < 1e-10:
+                return 0.0
+
+            log_detail = np.log(detail_energies + 1e-10)   # (4,) log-energies
+
+            # EMA on log-energies (warm-started at calibration mean → score=0 at analysis start).
+            # Uses per-sample alpha so time constant matches the per-window calibration alpha.
+            self._wavelet_ema = ((1.0 - self._wavelet_ema_alpha_analysis) * self._wavelet_ema
+                                 + self._wavelet_ema_alpha_analysis * log_detail)
+
+            z = (self._wavelet_ema - self._wavelet_log_mean) / self._wavelet_log_std
+            return float(np.mean(np.abs(z)))
+        except Exception as e:
+            print(f"[Wavelet] score error: {e}")
+            return 0.0
 
     def calculate_spectral_slope(self, freqs: np.ndarray, power: np.ndarray) -> float:
         """

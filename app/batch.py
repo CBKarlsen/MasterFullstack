@@ -185,6 +185,7 @@ def run_batch_analysis(
             "composite_score": 0.0,
             "turbulence_score": 0.0,
             "spectral_slope": 0.0,
+            "wavelet_score": 0.0,
             "traffic_light": "gray",
             "light_msg": "Calibrating",
             "ensemble_probability": 0.0,
@@ -214,6 +215,7 @@ def run_batch_analysis(
                 "composite_score": results.get("composite", 0.0),
                 "turbulence_score": results.get("turbulence", 0.0),
                 "spectral_slope": results.get("spectral_slope", 0.0),
+                "wavelet_score": results.get("wavelet", 0.0),
                 "traffic_light": results.get("light_color", "gray"),
                 "light_msg": results.get("status_msg", ""),
                 "ensemble_probability": 0.0,
@@ -226,6 +228,7 @@ def run_batch_analysis(
                 "composite_score": results.get("composite", 0.0),
                 "turbulence_score": results.get("turbulence", 0.0),
                 "spectral_slope": results.get("spectral_slope", 0.0),
+                "wavelet_score": results.get("wavelet", 0.0),
             }))
 
     analysis_points = [p for p in timeseries if p["phase"] == "analysis"]
@@ -259,12 +262,15 @@ def run_batch_analysis(
             "composite_mean": detector.baseline_composite_mean,
             "composite_std": detector.baseline_composite_std,
             "composite_p99": float(np.percentile(detector.baseline_composites, 99)) if len(detector.baseline_composites) > 0 else None,
+            "wavelet_mean": detector.baseline_wavelet_mean,
+            "wavelet_std": float(np.std(detector._sorted_wavelet_composites)) if len(detector._sorted_wavelet_composites) > 0 else 0.0,
             "samples_used": calibration_samples,
         },
         "thresholds": {
             "sigma": sigma,
             "fft_threshold": detector.fft_threshold,
             "static_threshold": detector.critical_threshold,
+            "wavelet_threshold": detector.wavelet_threshold,
         },
         "metadata": {
             "total_points": len(timeseries),

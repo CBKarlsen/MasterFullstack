@@ -190,10 +190,12 @@ class SimulationEngine:
             "static_score": results.get('static', 0),
             "spectral_slope": results.get('spectral_slope', 0),
             "turbulence_score": results.get('turbulence', 0),
+            "wavelet_score": results.get('wavelet', 0),
 
             # Thresholds (sent every frame so frontend stays in sync)
             "limit_threshold": results.get('fft_threshold', self.detector.fft_threshold),
             "static_threshold": results.get('static_threshold', self.detector.critical_threshold),
+            "wavelet_threshold": results.get('wavelet_threshold', self.detector.wavelet_threshold),
             "current_sigma": results.get('current_sigma', self.detector.sigma),
 
             # Traffic light
