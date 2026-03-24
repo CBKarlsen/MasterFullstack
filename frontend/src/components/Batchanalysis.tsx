@@ -7,6 +7,8 @@ import {
   CrossingCard,
   type AnalysisPoint,
 } from "./BatchAnalysisCards";
+import { CloggingForecast } from "./CloggingForecast";
+import { computeForecast, type ForecastData } from "../utils/forecastClient";
 
 interface CalibrationStats {
   baseline_mean: number;
@@ -30,6 +32,7 @@ interface AnalysisResult {
   columns: string[];
   calibration: CalibrationStats;
   thresholds: Thresholds;
+  forecast: ForecastData | null;
   metadata: {
     total_points: number;
     duration_seconds: number;
@@ -220,6 +223,12 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
     static_threshold: 0.018,
     wavelet_threshold: 0.8,
   };
+
+  // Forecast recomputes whenever sigma changes — no server round-trip needed
+  const activeForecast = useMemo((): ForecastData | null => {
+    if (!result) return null;
+    return computeForecast(result.timeseries, effectiveThresholds.fft_threshold);
+  }, [result, effectiveThresholds.fft_threshold]);
 
   // ── ML analytics (analysis phase only) ────────────────────────────────────
   const trafficDist = useMemo(() => {
@@ -640,6 +649,14 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
               height={200}
             />
           </div>
+
+          {/* ── Clogging Forecast — updates live when sigma changes ── */}
+          {activeForecast && (
+            <CloggingForecast
+              forecast={activeForecast}
+              timeseries={result.timeseries}
+            />
+          )}
 
           {/* ── ML Results Section ── */}
           {(trafficDist || mlStats) && (

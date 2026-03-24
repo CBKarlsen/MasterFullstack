@@ -12,6 +12,7 @@ import numpy as np
 from typing import Dict, Any, List, Optional
 from .backend import CloggingDetector, _sigma_to_pct
 from .dataloader import DataStreamer
+from .forecast import compute_clogging_forecast
 from .models import get_registry, InputType
 
 
@@ -253,8 +254,11 @@ def run_batch_analysis(
     else:
         timeseries_out = timeseries
 
+    forecast = compute_clogging_forecast(timeseries_out, detector.fft_threshold)
+
     return {
         "timeseries": timeseries_out,
+        "forecast": forecast,
         "columns": columns,
         "calibration": {
             "baseline_mean": detector.baseline_mean,

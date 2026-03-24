@@ -13,6 +13,7 @@ import { ControlChartGrid } from "./ControlChartGrid";
 import type { TrafficLight as TLType } from "../types";
 import { BatchAnalysis } from "./BatchAnalysis";
 import { ModelsTab } from "./ModelsTab";
+import { LiveForecastPanel } from "./LiveForecastPanel";
 
 export function Dashboard() {
   const {
@@ -351,6 +352,12 @@ export function Dashboard() {
                   chartHeight={180}
                 />
               </div>
+
+              {/* Live Forecast — appears automatically once threshold is crossed */}
+              <LiveForecastPanel
+                chartData={chartData}
+                fftThreshold={currentData?.limit_threshold}
+              />
             </>
           ) : (
             <BatchAnalysis selectedFile={selectedFile} />
