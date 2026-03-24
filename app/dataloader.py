@@ -123,7 +123,7 @@ class DataStreamer:
                     try:
                         v = float(str(x).replace(',', '.'))
                         return 0.0 if (np.isnan(v) or np.isinf(v)) else v
-                    except:
+                    except (ValueError, TypeError):
                         return 0.0
 
                 # --- STEP 1: AUTO-DETECT TIME STEP (dt) ---

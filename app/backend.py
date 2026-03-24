@@ -28,6 +28,27 @@ except ImportError:
     _PYWT_AVAILABLE = False
 
 
+# ---------------------------------------------------------------------------
+# Module-level constants (replaces scattered magic numbers)
+# ---------------------------------------------------------------------------
+
+CALIBRATION_STEP_RATIO = 20       # Step = window_size // 20 → ~5% overlap
+ADAPTIVE_BASELINE_GUARD = 0.4     # Only adapt baseline when score < 40% of threshold
+SPECTRAL_SLOPE_FREQ_MIN = 1.0     # Hz — lower bound for log-log slope fit
+SPECTRAL_SLOPE_FREQ_MAX = 50.0    # Hz — upper bound for log-log slope fit
+SPECTRAL_SLOPE_MIN_BINS = 5       # Minimum frequency bins required for slope fit
+FREQ_SPLIT_MIN_IDX = 2            # Minimum split index into frequency bins
+COMPOSITE_BUFFER_MAX_LEN = 300    # Rolling history length for ETA prediction
+COMPOSITE_BUFFER_MIN_LEN = 50     # Minimum entries before ETA is computed
+ETA_REGRESSION_WINDOW = 150       # Log-linear regression over last N composite values
+ETA_STABLE_SECONDS = 1200         # >20 min left → "Slight Trend" (green)
+ETA_WARNING_SECONDS = 300         # >5 min left → "Warning" (yellow)
+WARNING_FRACTION = 0.7            # Traffic light turns non-green at 70% of threshold
+COMPOSITE_BASELINE_FALLBACK = 0.8 # Fallback threshold when no calibration data
+WAVELET_THRESHOLD_FALLBACK = 2.0  # Fallback wavelet threshold (z-score)
+FFT_THRESHOLD_FALLBACK = 0.05     # Fallback FFT threshold before calibration
+
+
 def _sigma_to_pct(sigma: float) -> float:
     """Map sigma to a one-tailed normal percentile, capped at 99.9."""
     return min(99.9, 100.0 * (0.5 * (1.0 + math.erf(sigma / math.sqrt(2.0)))))
@@ -97,7 +118,7 @@ class CloggingDetector:
         self._wavelet_log_std: Optional[np.ndarray] = None    # (4,) std log-energy per detail level
         self._sorted_wavelet_composites: np.ndarray = np.array([])
         self.baseline_wavelet_mean: float = 0.0
-        self.wavelet_threshold: float = 2.0  # fallback (sensible z-score default)
+        self.wavelet_threshold: float = WAVELET_THRESHOLD_FALLBACK
         # EMA smoothing for wavelet log-energies.
         # Calibration updates EMA once per window, spaced step=window_size//20 samples apart.
         # Analysis updates EMA every sample (window slides by 1).
@@ -111,7 +132,7 @@ class CloggingDetector:
 
         # Thresholds (computed during calibration)
         self.critical_threshold = 0.0
-        self.fft_threshold = 0.05  # fallback default
+        self.fft_threshold = FFT_THRESHOLD_FALLBACK
 
         # History for plotting and prediction
         self.trend_history = []
@@ -180,7 +201,7 @@ class CloggingDetector:
         elif self.baseline_composite_mean > 0:
             self.fft_threshold = self.baseline_composite_mean * (1.0 + self.sigma * 0.1)
         else:
-            self.fft_threshold = 0.8  # safe fallback for normalized [0,1] score
+            self.fft_threshold = COMPOSITE_BASELINE_FALLBACK
 
         # Wavelet threshold: same percentile approach (z-score space)
         if len(self._sorted_wavelet_composites) > 0:
@@ -188,7 +209,7 @@ class CloggingDetector:
         elif self.baseline_wavelet_mean > 0:
             self.wavelet_threshold = self.baseline_wavelet_mean + self.sigma * 0.5
         else:
-            self.wavelet_threshold = 2.0   # ~2 sigma for a half-normal, sensible z-score fallback
+            self.wavelet_threshold = WAVELET_THRESHOLD_FALLBACK
 
         print(f"Thresholds recalculated (σ={self.sigma:.1f}): "
               f"Static={self.critical_threshold:.5f}, "
@@ -199,121 +220,28 @@ class CloggingDetector:
         """
         Calibrate the detector using baseline (healthy) data.
 
-        Computes baseline statistics for both raw signal and derived
-        composite scores, then sets thresholds based on sigma.
-
         Args:
             baseline_data: List of pressure/signal values during normal operation.
         """
         if len(baseline_data) < 2:
             return
 
-        self.baseline_mean = np.mean(baseline_data)
-        self.baseline_std = np.std(baseline_data)
-
-        # --- Compute baseline spectrum and composite scores ---
-        # Pass 1: collect all FFT spectra from calibration windows.
-        # Pass 2: compute composite as L1 spectral distance from the mean baseline
-        # spectrum. This makes the score relative to THIS file's own operating
-        # conditions, so files with naturally different spectral shapes don't
-        # produce false positives against a threshold calibrated on another file.
-        window_size = self.window_size
-        step = max(1, window_size // 20)  # ~5% step → many windows from short calibration
-
-        spectra_list = []
-        wavelet_energies_list = []
-        freqs = np.fft.rfftfreq(window_size, d=1 / self.fs)
-
-        for i in range(0, len(baseline_data) - window_size + 1, step):
-            segment = np.array(baseline_data[i: i + window_size])
-            ham_signal = segment * np.hamming(window_size)
-            fft_power = np.abs(np.fft.rfft(ham_signal)) ** 2
-            spectra_list.append(fft_power)
-
-            # DWT energy per decomposition level
-            if _PYWT_AVAILABLE:
-                coeffs = _pywt.wavedec(segment, self._wavelet_name, level=self._wavelet_level)
-                wavelet_energies_list.append(np.array([np.sum(c ** 2) for c in coeffs]))
-
-        if spectra_list:
-            spectra_array = np.array(spectra_list)                    # (n_windows, n_bins)
-            mean_spectrum = np.mean(spectra_array, axis=0)
-            baseline_norm = _normalize_spectrum(mean_spectrum)
-
-            # Vectorised L1 distances — no Python loop over windows.
-            spec_sums = np.sum(spectra_array, axis=1, keepdims=True)  # (n_windows, 1)
-            spectra_norm = spectra_array / (spec_sums + 1e-10)        # (n_windows, n_bins)
-            baseline_composites = np.sum(np.abs(spectra_norm - baseline_norm), axis=1)
-
-            self.baseline_spectrum = mean_spectrum
-            self.baseline_spectrum_norm = baseline_norm
-            self.baseline_freqs = freqs
-            self.baseline_composites = baseline_composites
-            self._sorted_composites = np.sort(baseline_composites)    # cached for fast percentile
-            self.baseline_composite_mean = float(np.mean(baseline_composites))
-            self.baseline_composite_std = float(np.std(baseline_composites))
-        else:
-            self.baseline_spectrum = None
-            self.baseline_spectrum_norm = None
-            self.baseline_composites = np.array([])
-            self._sorted_composites = np.array([])
-            self.baseline_composite_mean = 0.0
-            self.baseline_composite_std = 0.0
-
-        # --- Wavelet baseline (per-level log-energy z-scores) ---
-        # wavelet_energies_list contains [cA4, cD4, cD3, cD2, cD1] energies per window.
-        # We discard cA4 (approximation = DC-like, very stable, not sensitive to clogging)
-        # and keep only the detail coefficients [cD4, cD3, cD2, cD1].
-        # Score = mean |z_i| where z_i = (EMA(log E_i) - mu_i) / sigma_i.
-        # This fixes two issues with the old normalized-distribution approach:
-        #   1. Each band is normalized by its own calibration sigma → noisy bands (cD4)
-        #      contribute no more than stable bands (cD1).
-        #   2. Absolute energy increases are detected even if all bands rise proportionally
-        #      (log-energy increases when absolute energy increases).
-        if wavelet_energies_list:
-            wv_array = np.array(wavelet_energies_list)    # (n_windows, 5)
-            detail_array = wv_array[:, 1:]                # drop cA4 → (n_windows, 4)
-            log_detail = np.log(detail_array + 1e-10)     # (n_windows, 4) log-space
-
-            _wavelet_log_mean = np.mean(log_detail, axis=0)                            # (4,)
-            _wavelet_log_std = np.maximum(np.std(log_detail, axis=0), 1e-6)            # (4,) guarded
-
-            # Simulate EMA through calibration windows (warm-started at mean → no transient)
-            alpha = self._wavelet_ema_alpha
-            ema_state = _wavelet_log_mean.copy()
-            ema_composites = []
-            for row in log_detail:
-                ema_state = (1.0 - alpha) * ema_state + alpha * row
-                z = (ema_state - _wavelet_log_mean) / _wavelet_log_std
-                ema_composites.append(float(np.mean(np.abs(z))))
-
-            self._wavelet_log_mean = _wavelet_log_mean
-            self._wavelet_log_std = _wavelet_log_std
-            self._sorted_wavelet_composites = np.sort(np.array(ema_composites))
-            self.baseline_wavelet_mean = float(np.mean(ema_composites))
-            self._wavelet_ema = _wavelet_log_mean.copy()   # warm-start analysis EMA → score=0 at start
-
-            print(f"[Wavelet] Baseline (log-energy z-score): "
-                  f"mean_score={self.baseline_wavelet_mean:.4f}, "
-                  f"log_mean={np.round(_wavelet_log_mean, 2).tolist()}")
-        else:
-            self._wavelet_log_mean = None
-            self._wavelet_log_std = None
-            self._sorted_wavelet_composites = np.array([])
-            self.baseline_wavelet_mean = 0.0
-            self._wavelet_ema = None
-            print("[Wavelet] WARNING: no wavelet energies computed during calibration")
-
-        # Store baseline static statistics
+        self.baseline_mean = float(np.mean(baseline_data))
+        self.baseline_std = float(np.std(baseline_data))
         self.baseline_static_mean = 0.0
         self.baseline_static_std = self.baseline_std
 
-        self.is_calibrated = True
+        step = max(1, self.window_size // CALIBRATION_STEP_RATIO)
+        freqs = np.fft.rfftfreq(self.window_size, d=1.0 / self.fs)
+        spectra_list, wavelet_energies_list = self._collect_calibration_windows(baseline_data, step)
 
-        # Calculate thresholds using current sigma
+        self._calibrate_spectrum(spectra_list, freqs)
+        self._calibrate_wavelet(wavelet_energies_list)
+
+        self.is_calibrated = True
         self._recalculate_thresholds()
 
-        print(f"Calibrated! Baseline composite (L1 spectral distance): "
+        print(f"Calibrated! Baseline composite: "
               f"mean={self.baseline_composite_mean:.6f}, "
               f"std={self.baseline_composite_std:.6f}, "
               f"n_windows={len(spectra_list)}")
@@ -321,6 +249,92 @@ class CloggingDetector:
         if self._wavelet_log_mean is not None:
             print(f"  → wavelet_threshold (σ={self.sigma}): {self.wavelet_threshold:.6f} "
                   f"(baseline_mean={self.baseline_wavelet_mean:.6f})")
+
+    def _collect_calibration_windows(
+        self, baseline_data: List[float], step: int
+    ) -> tuple:
+        """Slide windows over baseline data and collect FFT spectra + wavelet energies."""
+        spectra_list = []
+        wavelet_energies_list = []
+        window_size = self.window_size
+
+        for i in range(0, len(baseline_data) - window_size + 1, step):
+            segment = np.array(baseline_data[i: i + window_size])
+            ham_signal = segment * np.hamming(window_size)
+            fft_power = np.abs(np.fft.rfft(ham_signal)) ** 2
+            spectra_list.append(fft_power)
+
+            if _PYWT_AVAILABLE:
+                coeffs = _pywt.wavedec(segment, self._wavelet_name, level=self._wavelet_level)
+                wavelet_energies_list.append(np.array([np.sum(c ** 2) for c in coeffs]))
+
+        return spectra_list, wavelet_energies_list
+
+    def _calibrate_spectrum(self, spectra_list: list, freqs: np.ndarray) -> None:
+        """Build baseline FFT fingerprint from calibration windows."""
+        if not spectra_list:
+            self.baseline_spectrum = None
+            self.baseline_spectrum_norm = None
+            self.baseline_freqs = freqs
+            self.baseline_composites = np.array([])
+            self._sorted_composites = np.array([])
+            self.baseline_composite_mean = 0.0
+            self.baseline_composite_std = 0.0
+            return
+
+        spectra_array = np.array(spectra_list)                    # (n_windows, n_bins)
+        mean_spectrum = np.mean(spectra_array, axis=0)
+        baseline_norm = _normalize_spectrum(mean_spectrum)
+
+        # Vectorised L1 distances — no Python loop over windows
+        spec_sums = np.sum(spectra_array, axis=1, keepdims=True)  # (n_windows, 1)
+        spectra_norm = spectra_array / (spec_sums + 1e-10)
+        baseline_composites = np.sum(np.abs(spectra_norm - baseline_norm), axis=1)
+
+        self.baseline_spectrum = mean_spectrum
+        self.baseline_spectrum_norm = baseline_norm
+        self.baseline_freqs = freqs
+        self.baseline_composites = baseline_composites
+        self._sorted_composites = np.sort(baseline_composites)    # cached for O(1) percentile
+        self.baseline_composite_mean = float(np.mean(baseline_composites))
+        self.baseline_composite_std = float(np.std(baseline_composites))
+
+    def _calibrate_wavelet(self, wavelet_energies_list: list) -> None:
+        """Build wavelet log-energy z-score baseline from calibration windows."""
+        if not wavelet_energies_list:
+            self._wavelet_log_mean = None
+            self._wavelet_log_std = None
+            self._sorted_wavelet_composites = np.array([])
+            self.baseline_wavelet_mean = 0.0
+            self._wavelet_ema = None
+            print("[Wavelet] WARNING: no wavelet energies computed during calibration")
+            return
+
+        wv_array = np.array(wavelet_energies_list)  # (n_windows, 5)
+        detail_array = wv_array[:, 1:]               # drop cA4 → (n_windows, 4)
+        log_detail = np.log(detail_array + 1e-10)
+
+        log_mean = np.mean(log_detail, axis=0)                       # (4,)
+        log_std = np.maximum(np.std(log_detail, axis=0), 1e-6)       # (4,) guarded
+
+        # Simulate EMA through calibration windows (warm-started → no transient)
+        alpha = self._wavelet_ema_alpha
+        ema_state = log_mean.copy()
+        ema_composites = []
+        for row in log_detail:
+            ema_state = (1.0 - alpha) * ema_state + alpha * row
+            z = (ema_state - log_mean) / log_std
+            ema_composites.append(float(np.mean(np.abs(z))))
+
+        self._wavelet_log_mean = log_mean
+        self._wavelet_log_std = log_std
+        self._sorted_wavelet_composites = np.sort(np.array(ema_composites))
+        self.baseline_wavelet_mean = float(np.mean(ema_composites))
+        self._wavelet_ema = log_mean.copy()  # warm-start analysis EMA
+
+        print(f"[Wavelet] Baseline (log-energy z-score): "
+              f"mean_score={self.baseline_wavelet_mean:.4f}, "
+              f"log_mean={np.round(log_mean, 2).tolist()}")
 
     def process_sample(self, pressure_val: float, time_sec: float) -> Optional[Dict[str, Any]]:
         """
@@ -334,146 +348,127 @@ class CloggingDetector:
             Dictionary containing all detection results including thresholds.
         """
         self.buffer.append(pressure_val)
-        results = {}
-
         if len(self.buffer) < self.window_size:
             return None
 
-        # Prepare signal
         raw_signal = np.array(self.buffer)
+        curr_mean = float(np.mean(raw_signal))
+        fft_power, freqs, current_norm, split_idx = self._compute_fft_spectrum(raw_signal)
 
-        # =====================================================================
-        # 1. STATIC METHOD (Hydraulic Head Deviation)
-        # =====================================================================
-        curr_mean = np.mean(raw_signal)
-        static_score = 0.0
+        results: Dict[str, Any] = {
+            'static': self._compute_static_score(curr_mean),
+            'composite': self._compute_composite_score(fft_power, current_norm, split_idx),
+            'turbulence': self._compute_turbulence_score(raw_signal, curr_mean, fft_power, split_idx),
+            'wavelet': self.calculate_wavelet_score(raw_signal),
+            'raw_freqs': freqs[freqs > 0].tolist(),
+            'raw_spectrum': fft_power[freqs > 0].tolist(),
+        }
+
         if self.is_calibrated:
-            static_score = abs(curr_mean - self.baseline_mean)
-        results['static'] = static_score
-
-        # =====================================================================
-        # 2. FFT ANALYSIS
-        # =====================================================================
-        ham_signal = raw_signal * np.hamming(len(raw_signal))
-        fft_complex = np.fft.rfft(ham_signal)
-        fft_power = np.abs(fft_complex) ** 2
-        freqs = np.fft.rfftfreq(len(ham_signal), 1 / self.fs)
-
-        # Store raw spectrum for visualization
-        mask_vis = freqs > 0
-        results['raw_freqs'] = freqs[mask_vis].tolist()
-        results['raw_spectrum'] = fft_power[mask_vis].tolist()
-
-        # =====================================================================
-        # 3. COMPOSITE METHOD (L1 spectral distance from baseline shape)
-        # When calibrated: measures how much the current spectral shape deviates
-        # from the file's own baseline — normalised per-file, no cross-file bias.
-        # Before calibration: falls back to high-band energy fraction.
-        # =====================================================================
-        nyquist = self.fs / 2.0
-        split_freq = min(1.0, nyquist / 4.0)
-        split_idx = max(2, np.searchsorted(freqs, split_freq))
-        total_power = np.sum(fft_power)
-
-        current_norm = _normalize_spectrum(fft_power)
-
-        if self.is_calibrated and self.baseline_spectrum_norm is not None:
-            composite_val = float(np.sum(np.abs(current_norm - self.baseline_spectrum_norm)))
-
-            # Adaptive baseline: slowly track long-term spectral drift so that
-            # gradual healthy changes (temperature, viscosity, pump warm-up) don't
-            # accumulate into false positives hours later.
-            # Only adapt when the signal is clearly healthy (score well below threshold)
-            # so actual clogging events don't corrupt the reference.
-            # Both arrays sum to 1, so their weighted average also sums to 1 — no re-norm needed.
-            if composite_val < self.fft_threshold * 0.4:
-                self.baseline_spectrum_norm = (
-                    (1.0 - self._baseline_alpha) * self.baseline_spectrum_norm
-                    + self._baseline_alpha * current_norm
-                )
+            self._fill_calibrated_results(results, freqs, fft_power, time_sec)
+            self.trend_history.append((time_sec, results['static']))
         else:
-            composite_val = np.sum(fft_power[split_idx:]) / total_power if total_power > 1e-10 else 0.0
-
-        results['composite'] = composite_val
-
-        # =====================================================================
-        # 4. TURBULENCE METHOD (Detrended FFT)
-        # =====================================================================
-        detrended = raw_signal - curr_mean
-        detrended = detrended * np.hamming(len(detrended))
-        fft_pure = np.abs(np.fft.rfft(detrended)) ** 2
-        total_pure = np.sum(fft_pure[1:])
-        results['turbulence'] = np.sum(fft_pure[split_idx:]) / total_pure if total_pure > 1e-10 else 0.0
-
-        # =====================================================================
-        # 5. WAVELET METHOD (DWT detail-energy distribution shift)
-        # =====================================================================
-        results['wavelet'] = self.calculate_wavelet_score(raw_signal)
-
-        # =====================================================================
-        # 6. ADVANCED PHYSICS & PREDICTION (Calibrated)
-        # =====================================================================
-        if self.is_calibrated:
-            # A. Spectral Slope
-            slope_val = self.calculate_spectral_slope(freqs, fft_power)
-            results['spectral_slope'] = slope_val
-
-            # B. Composite Prediction (Traffic Light)
-            light_color, status_msg = self.predict_composite_eta(time_sec, results['composite'])
-            results['light_color'] = light_color
-            results['status_msg'] = status_msg
-
-            # C. Current thresholds (so frontend always has latest)
-            results['fft_threshold'] = self.fft_threshold
-            results['static_threshold'] = self.critical_threshold
-            results['wavelet_threshold'] = self.wavelet_threshold
-            results['current_sigma'] = self.sigma
-
-            # =====================================================================
-            # 7. MULTI-MODEL PREDICTIONS
-            # =====================================================================
-            features = {
-                'static_score': results['static'],
-                'composite_score': results['composite'],
-                'turbulence_score': results['turbulence'],
-                'spectral_slope': slope_val,
-                'wavelet_score': results['wavelet'],
-            }
-            # Always expose features so batch.py can collect them without re-computing
-            results['_features'] = features
-
-            if self._enable_models:
-                self._sequence_manager.add_features(features)
-                model_results = self._run_all_models(features)
-                results['models'] = model_results
-                results['ensemble_probability'] = self._calculate_ensemble(model_results)
-
-                if 'fft_physics' in model_results:
-                    results['ml_probability'] = model_results['fft_physics'].get('probability', 0.0)
-                else:
-                    results['ml_probability'] = results['ensemble_probability']
-            else:
-                results['models'] = {}
-                results['ensemble_probability'] = 0.0
-                results['ml_probability'] = 0.0
-
-        else:
-            results['spectral_slope'] = 0.0
-            results['light_color'] = "gray"
-            results['status_msg'] = "Calibrating..."
-            results['ml_probability'] = 0.0
-            results['models'] = {}
-            results['ensemble_probability'] = 0.0
-            results['fft_threshold'] = self.fft_threshold
-            results['static_threshold'] = self.critical_threshold
-            results['wavelet_threshold'] = self.wavelet_threshold
-            results['current_sigma'] = self.sigma
-
-        # Store history for trend analysis
-        if self.is_calibrated:
-            self.trend_history.append((time_sec, static_score))
+            self._fill_uncalibrated_results(results)
 
         return results
+
+    def _compute_static_score(self, curr_mean: float) -> float:
+        """Hydraulic head deviation from baseline mean."""
+        if not self.is_calibrated:
+            return 0.0
+        return abs(curr_mean - self.baseline_mean)
+
+    def _compute_fft_spectrum(
+        self, signal: np.ndarray
+    ) -> tuple:
+        """Compute windowed FFT and split index. Returns (fft_power, freqs, current_norm, split_idx)."""
+        ham_signal = signal * np.hamming(len(signal))
+        fft_power = np.abs(np.fft.rfft(ham_signal)) ** 2
+        freqs = np.fft.rfftfreq(len(ham_signal), 1.0 / self.fs)
+        current_norm = _normalize_spectrum(fft_power)
+        nyquist = self.fs / 2.0
+        split_freq = min(1.0, nyquist / 4.0)
+        split_idx = max(FREQ_SPLIT_MIN_IDX, int(np.searchsorted(freqs, split_freq)))
+        return fft_power, freqs, current_norm, split_idx
+
+    def _compute_composite_score(
+        self, fft_power: np.ndarray, current_norm: np.ndarray, split_idx: int
+    ) -> float:
+        """L1 spectral distance from baseline shape (calibrated) or high-band fraction (fallback)."""
+        if not self.is_calibrated or self.baseline_spectrum_norm is None:
+            total_power = float(np.sum(fft_power))
+            return float(np.sum(fft_power[split_idx:])) / total_power if total_power > 1e-10 else 0.0
+
+        composite_val = float(np.sum(np.abs(current_norm - self.baseline_spectrum_norm)))
+        if composite_val < self.fft_threshold * ADAPTIVE_BASELINE_GUARD:
+            self.baseline_spectrum_norm = (
+                (1.0 - self._baseline_alpha) * self.baseline_spectrum_norm
+                + self._baseline_alpha * current_norm
+            )
+        return composite_val
+
+    def _compute_turbulence_score(
+        self, signal: np.ndarray, curr_mean: float, fft_power: np.ndarray, split_idx: int
+    ) -> float:
+        """Detrended FFT high-band energy fraction."""
+        detrended = (signal - curr_mean) * np.hamming(len(signal))
+        fft_pure = np.abs(np.fft.rfft(detrended)) ** 2
+        total_pure = float(np.sum(fft_pure[1:]))
+        return float(np.sum(fft_pure[split_idx:])) / total_pure if total_pure > 1e-10 else 0.0
+
+    def _fill_calibrated_results(
+        self, results: Dict[str, Any], freqs: np.ndarray, fft_power: np.ndarray, time_sec: float
+    ) -> None:
+        """Populate calibrated-mode fields: slope, traffic light, thresholds, ML."""
+        slope_val = self.calculate_spectral_slope(freqs, fft_power)
+        results['spectral_slope'] = slope_val
+
+        light_color, status_msg = self.predict_composite_eta(time_sec, results['composite'])
+        results['light_color'] = light_color
+        results['status_msg'] = status_msg
+
+        results['fft_threshold'] = self.fft_threshold
+        results['static_threshold'] = self.critical_threshold
+        results['wavelet_threshold'] = self.wavelet_threshold
+        results['current_sigma'] = self.sigma
+
+        features = {
+            'static_score': results['static'],
+            'composite_score': results['composite'],
+            'turbulence_score': results['turbulence'],
+            'spectral_slope': slope_val,
+            'wavelet_score': results['wavelet'],
+        }
+        results['_features'] = features
+
+        if not self._enable_models:
+            results.update({'models': {}, 'ensemble_probability': 0.0, 'ml_probability': 0.0})
+            return
+
+        self._sequence_manager.add_features(features)
+        model_results = self._run_all_models(features)
+        results['models'] = model_results
+        results['ensemble_probability'] = self._calculate_ensemble(model_results)
+        results['ml_probability'] = (
+            model_results['fft_physics'].get('probability', 0.0)
+            if 'fft_physics' in model_results
+            else results['ensemble_probability']
+        )
+
+    def _fill_uncalibrated_results(self, results: Dict[str, Any]) -> None:
+        """Populate fallback values while calibration is pending."""
+        results.update({
+            'spectral_slope': 0.0,
+            'light_color': 'gray',
+            'status_msg': 'Calibrating...',
+            'ml_probability': 0.0,
+            'models': {},
+            'ensemble_probability': 0.0,
+            'fft_threshold': self.fft_threshold,
+            'static_threshold': self.critical_threshold,
+            'wavelet_threshold': self.wavelet_threshold,
+            'current_sigma': self.sigma,
+        })
 
     def _run_all_models(self, features: Dict[str, float]) -> Dict[str, Dict[str, Any]]:
         """Run prediction on all active models."""
@@ -577,8 +572,8 @@ class CloggingDetector:
         Healthy flow: steep slope (~-2.5 to -3.0), Kolmogorov cascade.
         Clogged flow: flat slope (~-1.0 to -1.5), white noise/cavitation.
         """
-        mask = (freqs > 1.0) & (freqs < 50.0)
-        if np.sum(mask) < 5:
+        mask = (freqs > SPECTRAL_SLOPE_FREQ_MIN) & (freqs < SPECTRAL_SLOPE_FREQ_MAX)
+        if np.sum(mask) < SPECTRAL_SLOPE_MIN_BINS:
             return 0.0
         try:
             x = np.log10(freqs[mask])
@@ -590,12 +585,13 @@ class CloggingDetector:
 
     def predict_robust(self) -> Optional[tuple]:
         """Robust linear prediction of time to critical threshold."""
-        if len(self.trend_history) < 500:
+        trend_min_len = COMPOSITE_BUFFER_MAX_LEN + ETA_REGRESSION_WINDOW
+        if len(self.trend_history) < trend_min_len:
             return None
         data = list(self.trend_history)
         times = np.array([x[0] for x in data])
         scores = np.array([x[1] for x in data])
-        window_len = 50
+        window_len = COMPOSITE_BUFFER_MIN_LEN
         if len(scores) > window_len:
             scores_smooth = np.convolve(scores, np.ones(window_len) / window_len, mode='valid')
             times_smooth = times[window_len - 1:]
@@ -623,20 +619,20 @@ class CloggingDetector:
         """Calculate time to critical using log-linear regression."""
         self.composite_buffer.append(current_score)
         self.composite_times.append(current_time)
-        if len(self.composite_buffer) > 300:
+        if len(self.composite_buffer) > COMPOSITE_BUFFER_MAX_LEN:
             self.composite_buffer.pop(0)
             self.composite_times.pop(0)
-        if len(self.composite_buffer) < 50:
+        if len(self.composite_buffer) < COMPOSITE_BUFFER_MIN_LEN:
             return "gray", "Initializing..."
 
         CRITICAL_LIMIT = self.fft_threshold
-        WARNING_LEVEL = CRITICAL_LIMIT * 0.7
+        WARNING_LEVEL = CRITICAL_LIMIT * WARNING_FRACTION
 
         if current_score < WARNING_LEVEL:
             return "green", "System Stable"
         try:
-            subset_scores = np.array(self.composite_buffer)[-150:]
-            subset_times = np.array(self.composite_times)[-150:]
+            subset_scores = np.array(self.composite_buffer)[-ETA_REGRESSION_WINDOW:]
+            subset_times = np.array(self.composite_times)[-ETA_REGRESSION_WINDOW:]
             subset_scores = np.maximum(subset_scores, 1e-9)
             log_scores = np.log(subset_scores)
             slope, intercept = np.polyfit(subset_times, log_scores, 1)
@@ -645,9 +641,9 @@ class CloggingDetector:
             target_log = np.log(CRITICAL_LIMIT)
             current_log = log_scores[-1]
             seconds_left = (target_log - current_log) / slope
-            if seconds_left > 1200:
+            if seconds_left > ETA_STABLE_SECONDS:
                 return "green", "Slight Trend (>20m)"
-            elif seconds_left > 300:
+            elif seconds_left > ETA_WARNING_SECONDS:
                 return "yellow", f"Warning: ~{int(seconds_left / 60)} min left"
             elif seconds_left > 0:
                 return "red", f"CRITICAL: < {int(seconds_left)}s"
