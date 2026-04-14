@@ -9,8 +9,22 @@ import {
 } from "./BatchAnalysisCards";
 import { CloggingForecast } from "./CloggingForecast";
 import { computeForecast, type ForecastData } from "../utils/forecastClient";
+import { SigmaComparisonChart } from "./SigmaComparisonChart";
+import { computeSigmaForecasts, loadStore } from "../utils/sigmaComparisonStore";
+import type { SigmaValue } from "../utils/sigmaComparisonStore";
+import {
+  appendEntry,
+  loadLog,
+  clearLog,
+  exportCsv,
+  importFromCsv,
+  updateEntryActualTime,
+} from "../utils/resultLogStore";
+import type { LogEntry } from "../utils/resultLogStore";
+import { LogTable } from "./LogTable";
+import { SigmaErrorChart } from "./SigmaErrorChart";
 
-interface CalibrationStats {
+export interface CalibrationStats {
   baseline_mean: number;
   baseline_std: number;
   composite_mean: number;
@@ -27,7 +41,7 @@ interface Thresholds {
   wavelet_threshold: number;
 }
 
-interface AnalysisResult {
+export interface AnalysisResult {
   timeseries: AnalysisPoint[];
   columns: string[];
   calibration: CalibrationStats;
@@ -47,6 +61,98 @@ interface BatchAnalysisProps {
 
 const SIGMA_OPTIONS = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
 
+// ── Pure helpers (used both in useMemo and runAnalysis) ────────────────────
+
+interface CrossingTimes {
+  static: number | null;
+  composite: number | null;
+  wavelet: number | null;
+}
+
+interface ThresholdSet {
+  fft_threshold: number;
+  static_threshold: number;
+  wavelet_threshold: number;
+}
+
+function computeCrossings(
+  analysisPoints: AnalysisPoint[],
+  thresh: ThresholdSet,
+  smoothingWindowSec: number,
+): CrossingTimes {
+  let staticCrossing: number | null = null;
+  for (const p of analysisPoints) {
+    if (p.static_score > thresh.static_threshold) { staticCrossing = p.time; break; }
+  }
+
+  let compositeCrossing: number | null = null;
+  let wStart = 0;
+  for (let i = 0; i < analysisPoints.length; i++) {
+    while (analysisPoints[wStart].time < analysisPoints[i].time - smoothingWindowSec) wStart++;
+    const win = analysisPoints.slice(wStart, i + 1).map((p) => p.composite_score);
+    win.sort((a, b) => a - b);
+    const mid = Math.floor(win.length / 2);
+    const median = win.length % 2 === 1 ? win[mid] : (win[mid - 1] + win[mid]) / 2;
+    if (median > thresh.fft_threshold) { compositeCrossing = analysisPoints[i].time; break; }
+  }
+
+  let waveletCrossing: number | null = null;
+  for (const p of analysisPoints) {
+    if ((p.wavelet_score ?? 0) > thresh.wavelet_threshold) { waveletCrossing = p.time; break; }
+  }
+
+  return { static: staticCrossing, composite: compositeCrossing, wavelet: waveletCrossing };
+}
+
+function secToHHMMSS(seconds: number | null): string | null {
+  if (seconds === null) return null;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  return [h, m, s].map((v) => String(v).padStart(2, "0")).join(":");
+}
+
+interface LogEntryInput {
+  result: AnalysisResult;
+  sigma: number;
+  calibrationSeconds: number;
+  smoothingWindowSec: number;
+  crossings: CrossingTimes;
+  sigmaForecasts: ReturnType<typeof computeSigmaForecasts>;
+  forecast: ForecastData | null;
+  peakMlProb: number | null;
+  actualCloggingTime: number | null;
+}
+
+function buildLogEntry(input: LogEntryInput): LogEntry {
+  const { result, sigma, calibrationSeconds, smoothingWindowSec, crossings, sigmaForecasts, forecast, peakMlProb, actualCloggingTime } = input;
+  const basename = result.metadata.file.split(/[\\/]/).pop() ?? result.metadata.file;
+  return {
+    filename: basename,
+    timestamp: new Date().toISOString(),
+    sigma,
+    calibrationSeconds,
+    smoothingWindowSec,
+    durationMin: parseFloat((result.metadata.duration_seconds / 60).toFixed(2)),
+    totalPoints: result.metadata.total_points,
+    samplingHz: result.metadata.sampling_hz,
+    compositeThreshold: result.thresholds.fft_threshold,
+    staticThreshold: result.thresholds.static_threshold,
+    waveletThreshold: result.thresholds.wavelet_threshold,
+    compositeCrossing: secToHHMMSS(crossings.composite),
+    staticCrossing: secToHHMMSS(crossings.static),
+    waveletCrossing: secToHHMMSS(crossings.wavelet),
+    forecastOnset: forecast ? secToHHMMSS(forecast.onset_time) : null,
+    forecastEtaSigma3: secToHHMMSS(sigmaForecasts[3 as SigmaValue].consensusEta),
+    forecastEtaSigma4: secToHHMMSS(sigmaForecasts[4 as SigmaValue].consensusEta),
+    forecastEtaSigma5: secToHHMMSS(sigmaForecasts[5 as SigmaValue].consensusEta),
+    actualCloggingTime: secToHHMMSS(actualCloggingTime),
+    bestFitModel: forecast?.best_fit ?? null,
+    bestFitR2: forecast ? (forecast.fits[forecast.best_fit]?.r2 ?? null) : null,
+    peakMlProbability: peakMlProb,
+  };
+}
+
 export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -55,6 +161,27 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
   const [thresholds, setThresholds] = useState<Thresholds | null>(null);
   const [calibrationSeconds, setCalibrationSeconds] = useState(30);
   const [smoothingWindowSec, setSmoothingWindowSec] = useState(60);
+  const [criticalMultiplier, setCriticalMultiplier] = useState(2.0);
+  const [logEntries, setLogEntries] = useState<LogEntry[]>(() => loadLog());
+
+  const logAnalysisResult = useCallback(
+    (data: AnalysisResult, usedSigma: number, usedCalibration: number, usedWindow: number, usedMultiplier: number) => {
+      const analysisPoints = data.timeseries.filter((p) => p.phase === "analysis");
+      const crossings = computeCrossings(analysisPoints, data.thresholds, usedWindow);
+      const sigmaForecasts = computeSigmaForecasts(data, usedWindow);
+      const forecast = computeForecast(data.timeseries, data.thresholds.fft_threshold, {
+        criticalMultiplier: usedMultiplier,
+        onsetTime: crossings.composite ?? undefined,
+        smoothingWindowSec: usedWindow,
+      });
+      const mlPoints = analysisPoints.filter((p) => p.ensemble_probability > 0);
+      const peakMl = mlPoints.length ? Math.max(...mlPoints.map((p) => p.ensemble_probability)) : null;
+      const actualCloggingTime = loadStore()[data.metadata.file]?.actualCloggingTime ?? null;
+
+      appendEntry(buildLogEntry({ result: data, sigma: usedSigma, calibrationSeconds: usedCalibration, smoothingWindowSec: usedWindow, crossings, sigmaForecasts, forecast, peakMlProb: peakMl, actualCloggingTime }));
+    },
+    [],
+  );
 
   // Run full analysis
   const runAnalysis = useCallback(async () => {
@@ -68,13 +195,15 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
       );
       setResult(response.data);
       setThresholds(response.data.thresholds);
+      logAnalysisResult(response.data, sigma, calibrationSeconds, smoothingWindowSec, criticalMultiplier);
+      setLogEntries(loadLog());
     } catch (err: unknown) {
       const e = err as { response?: { data?: { detail?: string } }; message?: string };
       setError(e.response?.data?.detail ?? e.message ?? "Analysis failed");
     } finally {
       setLoading(false);
     }
-  }, [selectedFile, sigma, calibrationSeconds]);
+  }, [selectedFile, sigma, calibrationSeconds, smoothingWindowSec, criticalMultiplier, logAnalysisResult]);
 
   // Recompute thresholds client-side (instant, no server call needed)
   const handleSigmaChange = useCallback(
@@ -162,59 +291,13 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
   }, [result]);
 
   // Find threshold crossing times — updates with sigma and smoothing window.
-  // Static: first raw sample above threshold (DC method, instantaneous is correct).
-  // Composite: first time the rolling mean crosses the threshold, to suppress
-  //            transient spikes and only flag a sustained spectral shift.
+  // Static/Wavelet: first raw sample above threshold.
+  // Composite: first rolling-median crossing (robust to transient spikes).
   const thresholdCrossings = useMemo(() => {
     if (!result) return { static: null as number | null, composite: null as number | null, wavelet: null as number | null };
-
-    const thresh = thresholds || {
-      sigma: 3.0,
-      fft_threshold: 0.05,
-      static_threshold: 0.018,
-      wavelet_threshold: 0.8,
-    };
-
+    const thresh = thresholds ?? { sigma: 3.0, fft_threshold: 0.05, static_threshold: 0.018, wavelet_threshold: 0.8 };
     const analysisPoints = result.timeseries.filter((p) => p.phase === "analysis");
-
-    // --- Static: raw first crossing ---
-    let staticCrossing: number | null = null;
-    for (const p of analysisPoints) {
-      if (p.static_score > thresh.static_threshold) {
-        staticCrossing = p.time;
-        break;
-      }
-    }
-
-    // --- Composite: rolling mean first crossing ---
-    let compositeCrossing: number | null = null;
-    let wStart = 0;
-    let wSum = 0;
-
-    for (let i = 0; i < analysisPoints.length; i++) {
-      const p = analysisPoints[i];
-      wSum += p.composite_score;
-      while (analysisPoints[wStart].time < p.time - smoothingWindowSec) {
-        wSum -= analysisPoints[wStart].composite_score;
-        wStart++;
-      }
-      const rollingMean = wSum / (i - wStart + 1);
-      if (rollingMean > thresh.fft_threshold) {
-        compositeCrossing = p.time;
-        break;
-      }
-    }
-
-    // --- Wavelet: raw first crossing ---
-    let waveletCrossing: number | null = null;
-    for (const p of analysisPoints) {
-      if ((p.wavelet_score ?? 0) > thresh.wavelet_threshold) {
-        waveletCrossing = p.time;
-        break;
-      }
-    }
-
-    return { static: staticCrossing, composite: compositeCrossing, wavelet: waveletCrossing };
+    return computeCrossings(analysisPoints, thresh, smoothingWindowSec);
   }, [result, thresholds, smoothingWindowSec]);
 
   const effectiveThresholds = thresholds || {
@@ -224,11 +307,15 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
     wavelet_threshold: 0.8,
   };
 
-  // Forecast recomputes whenever sigma changes — no server round-trip needed
+  // Forecast recomputes whenever sigma/multiplier/smoothing/onset changes — no server round-trip needed
   const activeForecast = useMemo((): ForecastData | null => {
     if (!result) return null;
-    return computeForecast(result.timeseries, effectiveThresholds.fft_threshold);
-  }, [result, effectiveThresholds.fft_threshold]);
+    return computeForecast(result.timeseries, effectiveThresholds.fft_threshold, {
+      criticalMultiplier,
+      onsetTime: thresholdCrossings.composite ?? undefined,
+      smoothingWindowSec,
+    });
+  }, [result, effectiveThresholds.fft_threshold, criticalMultiplier, thresholdCrossings.composite, smoothingWindowSec]);
 
   // ── ML analytics (analysis phase only) ────────────────────────────────────
   const trafficDist = useMemo(() => {
@@ -358,6 +445,40 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
             >
               {loading ? "Processing..." : "Run Analysis"}
             </button>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", borderLeft: "1px solid #e5e7eb", paddingLeft: "12px" }}>
+              <span style={{ fontSize: "12px", color: "#6b7280" }}>
+                {logEntries.length} logged
+              </span>
+              <button
+                onClick={() => { exportCsv(); }}
+                disabled={logEntries.length === 0}
+                title="Download all logged results as CSV"
+                style={{
+                  padding: "6px 12px", borderRadius: "6px", border: "1px solid #e5e7eb",
+                  background: logEntries.length === 0 ? "#f9fafb" : "#fff",
+                  color: logEntries.length === 0 ? "#9ca3af" : "#374151",
+                  cursor: logEntries.length === 0 ? "not-allowed" : "pointer",
+                  fontSize: "12px", fontWeight: 500,
+                }}
+              >
+                Export CSV
+              </button>
+              <button
+                onClick={() => { clearLog(); setLogEntries([]); }}
+                disabled={logEntries.length === 0}
+                title="Clear all logged results"
+                style={{
+                  padding: "6px 10px", borderRadius: "6px",
+                  border: `1px solid ${logEntries.length === 0 ? "#e5e7eb" : "#fca5a5"}`,
+                  background: "#fff",
+                  color: logEntries.length === 0 ? "#9ca3af" : "#dc2626",
+                  cursor: logEntries.length === 0 ? "not-allowed" : "pointer",
+                  fontSize: "12px",
+                }}
+              >
+                Clear log
+              </button>
+            </div>
           </div>
         </div>
 
@@ -543,7 +664,7 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
                 color="#2E7D32"
               />
               <CrossingCard
-                label={`Composite — rolling mean (${smoothingWindowSec}s) crosses threshold`}
+                label={`Composite — rolling median (${smoothingWindowSec}s) crosses threshold`}
                 time={thresholdCrossings.composite}
                 threshold={effectiveThresholds.fft_threshold}
                 color="#800080"
@@ -655,6 +776,17 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
             <CloggingForecast
               forecast={activeForecast}
               timeseries={result.timeseries}
+              criticalMultiplier={criticalMultiplier}
+              onCriticalMultiplierChange={setCriticalMultiplier}
+            />
+          )}
+
+          {/* ── Sigma Comparison — predicted vs actual, accumulates across files ── */}
+          {selectedFile && (
+            <SigmaComparisonChart
+              result={result}
+              selectedFile={selectedFile}
+              smoothingWindowSec={smoothingWindowSec}
             />
           )}
 
@@ -669,6 +801,39 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
             />
           )}
         </div>
+      )}
+
+      {/* ── Analysis Log ── */}
+      {logEntries.length > 0 && (
+        <details
+          style={{
+            marginTop: "20px", padding: "16px 20px",
+            backgroundColor: "#fff", borderRadius: "8px", border: "1px solid #e5e7eb",
+          }}
+        >
+          <summary style={{ cursor: "pointer", fontWeight: 600, fontSize: "14px", userSelect: "none" }}>
+            Analysis Log
+            <span style={{ fontWeight: 400, fontSize: "12px", color: "#6b7280", marginLeft: "8px" }}>
+              {logEntries.length} {logEntries.length === 1 ? "entry" : "entries"} — click to expand
+            </span>
+          </summary>
+          <div style={{ marginTop: "14px" }}>
+            <LogTable
+              entries={logEntries}
+              onUpdateActualTime={(entry, value) => {
+                updateEntryActualTime(entry.timestamp, entry.filename, value);
+                setLogEntries(loadLog());
+              }}
+              onImport={(csvText) => {
+                const count = importFromCsv(csvText);
+                setLogEntries(loadLog());
+                if (count === 0) alert("No new entries found (already imported or invalid format).");
+                else alert(`Imported ${count} new entries.`);
+              }}
+            />
+            <SigmaErrorChart entries={logEntries} />
+          </div>
+        </details>
       )}
     </div>
   );

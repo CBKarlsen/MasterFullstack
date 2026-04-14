@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { ChartDataPoint } from "../types";
 import { computeForecast } from "../utils/forecastClient";
 import { CloggingForecast } from "./CloggingForecast";
@@ -33,11 +33,15 @@ function adaptToAnalysisPoints(chartData: ChartDataPoint[]): AnalysisPoint[] {
 }
 
 export function LiveForecastPanel({ chartData, fftThreshold }: LiveForecastPanelProps) {
+  const [criticalMultiplier, setCriticalMultiplier] = useState(2.0);
   const adapted = useMemo(() => adaptToAnalysisPoints(chartData), [chartData]);
 
   const forecast = useMemo(
-    () => (fftThreshold !== undefined ? computeForecast(adapted, fftThreshold) : null),
-    [adapted, fftThreshold],
+    () =>
+      fftThreshold !== undefined
+        ? computeForecast(adapted, fftThreshold, { criticalMultiplier })
+        : null,
+    [adapted, fftThreshold, criticalMultiplier],
   );
 
   if (!forecast) return null;
@@ -55,7 +59,12 @@ export function LiveForecastPanel({ chartData, fftThreshold }: LiveForecastPanel
         }} />
         Live forecast — refits automatically as new data arrives
       </div>
-      <CloggingForecast forecast={forecast} timeseries={adapted} />
+      <CloggingForecast
+        forecast={forecast}
+        timeseries={adapted}
+        criticalMultiplier={criticalMultiplier}
+        onCriticalMultiplierChange={setCriticalMultiplier}
+      />
     </div>
   );
 }

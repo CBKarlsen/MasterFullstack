@@ -12,7 +12,7 @@ import numpy as np
 from typing import Dict, Any, List, Optional
 from .backend import CloggingDetector, _sigma_to_pct
 from .dataloader import DataStreamer
-from .forecast import compute_clogging_forecast
+from .forecast import compute_clogging_forecast, compute_flow_eta
 from .models import get_registry, InputType
 
 
@@ -256,9 +256,14 @@ def run_batch_analysis(
 
     forecast = compute_clogging_forecast(timeseries_out, detector.fft_threshold)
 
+    flow_forecast = None
+    if forecast is not None:
+        flow_forecast = compute_flow_eta(timeseries_out, forecast["onset_time"])
+
     return {
         "timeseries": timeseries_out,
         "forecast": forecast,
+        "flow_forecast": flow_forecast,
         "columns": columns,
         "calibration": {
             "baseline_mean": detector.baseline_mean,

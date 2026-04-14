@@ -15,9 +15,13 @@ import type { FitResult, ForecastData } from "../utils/forecastClient";
 
 export type { ForecastData };
 
+const MULTIPLIER_OPTIONS = [1.5, 2.0, 2.5, 3.0, 4.0, 5.0] as const;
+
 interface CloggingForecastProps {
   forecast: ForecastData;
   timeseries: AnalysisPoint[];
+  criticalMultiplier: number;
+  onCriticalMultiplierChange: (v: number) => void;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────
@@ -128,7 +132,12 @@ function ModelFitCard({ name, fit, isBest, criticalMultiplier }: ModelFitCardPro
 
 // ── Main component ─────────────────────────────────────────────────────────
 
-export function CloggingForecast({ forecast, timeseries }: CloggingForecastProps) {
+export function CloggingForecast({
+  forecast,
+  timeseries,
+  criticalMultiplier,
+  onCriticalMultiplierChange,
+}: CloggingForecastProps) {
   const chartData = useMemo(
     () => buildChartData(timeseries, forecast.onset_time, forecast.curve_data),
     [timeseries, forecast],
@@ -136,7 +145,21 @@ export function CloggingForecast({ forecast, timeseries }: CloggingForecastProps
 
   return (
     <div style={{ padding: "16px 20px", backgroundColor: "#fff", borderRadius: "8px", border: "1px solid #e5e7eb" }}>
-      <h3 style={{ margin: "0 0 4px", fontSize: "16px", fontWeight: 700 }}>Clogging Trajectory Forecast</h3>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
+        <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700 }}>Clogging Trajectory Forecast</h3>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <label style={{ fontSize: "12px", color: "#6b7280" }}>Critical level:</label>
+          <select
+            value={criticalMultiplier}
+            onChange={(e) => onCriticalMultiplierChange(Number(e.target.value))}
+            style={{ fontSize: "12px", padding: "2px 6px", borderRadius: "4px", border: "1px solid #e5e7eb" }}
+          >
+            {MULTIPLIER_OPTIONS.map((v) => (
+              <option key={v} value={v}>{v}×</option>
+            ))}
+          </select>
+        </div>
+      </div>
       <p style={{ margin: "0 0 16px", fontSize: "13px", color: "#6b7280" }}>
         Onset detected at {formatHHMMSS(forecast.onset_time)} — fitting 3 growth models to project time to{" "}
         {forecast.critical_multiplier}× detection threshold ({forecast.critical_threshold.toFixed(6)})

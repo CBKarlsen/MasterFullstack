@@ -1,0 +1,28 @@
+Experiment	Type	Description	Actual blockage (min)	σ	Composite crossing (min)	Static crossing (min)	Composite lead (min)	Static lead (min)	Composite alarm?	Static alarm?	Note
+Exp 1	BLOCKAGE	Exp 1 Partial clog (100 Hz, 4h21m)	66.0	3	10.23		55.8		YES	no	composite premature
+Exp 1	BLOCKAGE	Exp 1 Partial clog (100 Hz, 4h21m)	66.0	4	62.98		3.0		YES	no	
+Exp 1	BLOCKAGE	Exp 1 Partial clog (100 Hz, 4h21m)	66.0	5	62.98		3.0		YES	no	
+Exp 2	BLOCKAGE	Exp 2 Full clog (20 Hz, 3h14m)	194.0	3	154.53	178.4	39.5	15.6	YES	YES	
+Exp 2	BLOCKAGE	Exp 2 Full clog (20 Hz, 3h14m)	194.0	4	154.53	179.83	39.5	14.2	YES	YES	
+Exp 2	BLOCKAGE	Exp 2 Full clog (20 Hz, 3h14m)	194.0	5	154.53	180.22	39.5	13.8	YES	YES	
+11-12	BLOCKAGE	11-12 Partial→Full (1.1 Hz, 4h26m)	57.0	3	55.673	55.14	1.3	1.9	YES	YES	
+11-12	BLOCKAGE	11-12 Partial→Full (1.1 Hz, 4h26m)	57.0	4	55.673	55.202	1.3	1.8	YES	YES	
+11-12	BLOCKAGE	11-12 Partial→Full (1.1 Hz, 4h26m)	57.0	5	55.673	55.202	1.3	1.8	YES	YES	
+21-08	BLOCKAGE	21-08 Progressive (1 Hz, 1h13m)	70.0	3	5.244	5.478	64.8	64.5	YES	YES	
+21-08	BLOCKAGE	21-08 Progressive (1 Hz, 1h13m)	70.0	4	5.244	5.544	64.8	64.5	YES	YES	
+21-08	BLOCKAGE	21-08 Progressive (1 Hz, 1h13m)	70.0	5	5.244	5.644	64.8	64.4	YES	YES	
+01-10	BLOCKAGE	01-10 Orifice block (2 Hz, 27m)		3	18.316	1.258			YES	YES	static premature
+01-10	BLOCKAGE	01-10 Orifice block (2 Hz, 27m)		4	18.316	18.416			YES	YES	
+01-10	BLOCKAGE	01-10 Orifice block (2 Hz, 27m)		5	18.316	18.432			YES	YES	
+14-07	BLOCKAGE	14-07 4-run block (1 Hz, 1h45m)		3	17.3	1.35			YES	YES	static premature
+14-07	BLOCKAGE	14-07 4-run block (1 Hz, 1h45m)		4	17.3	1.817			YES	YES	static premature
+14-07	BLOCKAGE	14-07 4-run block (1 Hz, 1h45m)		5	17.3	16.9			YES	YES	
+13-10	BLOCKAGE	13-10 Sudden block (1 Hz, 1h33m)		3	0.983	0.983			YES	YES	
+13-10	BLOCKAGE	13-10 Sudden block (1 Hz, 1h33m)		4	0.983	0.983			YES	YES	
+13-10	BLOCKAGE	13-10 Sudden block (1 Hz, 1h33m)		5	0.983	0.983			YES	YES	
+29-06 Run1	NO BLOCK	29-06 Run1 No blockage (1 Hz, 41m)		3					no	no	
+29-06 Run1	NO BLOCK	29-06 Run1 No blockage (1 Hz, 41m)		4					no	no	
+29-06 Run1	NO BLOCK	29-06 Run1 No blockage (1 Hz, 41m)		5					no	no	
+04-04	NO BLOCK	04-04 No blockage (1 Hz, 5h18m)		3		58.733			no	YES	
+04-04	NO BLOCK	04-04 No blockage (1 Hz, 5h18m)		4		76.283			no	YES	
+04-04	NO BLOCK	04-04 No blockage (1 Hz, 5h18m)		5		76.617			no	YES	
