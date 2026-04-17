@@ -25,7 +25,6 @@ function adaptToAnalysisPoints(chartData: ChartDataPoint[]): AnalysisPoint[] {
       static_score: 0,
       turbulence_score: 0,
       spectral_slope: 0,
-      wavelet_score: 0,
       traffic_light: "",
       light_msg: "",
       ensemble_probability: 0,

@@ -87,7 +87,7 @@ export function RFTrainingPanel({ onTrainComplete }: RFTrainingPanelProps) {
   const [files, setFiles] = useState<DataFile[]>([]);
   const [selectedFile, setSelectedFile] = useState<string>("");
   const [sigma, setSigma] = useState(3);
-  const [calibrationSeconds, setCalibrationSeconds] = useState(30);
+  const [calibrationSeconds, setCalibrationSeconds] = useState(120);
   const [includeWarnings, setIncludeWarnings] = useState(false);
   const [nEstimators, setNEstimators] = useState(100);
   const [maxDepth, setMaxDepth] = useState<number | null>(8);

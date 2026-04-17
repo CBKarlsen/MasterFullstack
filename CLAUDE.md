@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This App Does
 
-Real-time pipe clogging detection platform for multiphase flow in oil pipelines. Streams sensor data (pressure, flow) from CSV/Excel files, analyzes signals using five complementary detection methods, runs pluggable ML models, and visualizes results in a web dashboard. Built as a master's thesis artifact (Casper Benjamin Karlsen, HVL) using Design Science Research methodology.
+Real-time pipe clogging detection platform for multiphase flow in oil pipelines. Streams sensor data (pressure, flow) from CSV/Excel files, analyzes signals using four complementary detection methods, runs pluggable ML models, and visualizes results in a web dashboard. Built as a master's thesis artifact (Casper Benjamin Karlsen, HVL) using Design Science Research methodology.
 
 ## Development Setup
 
-**Always use a virtual environment.** PyWavelets and other packages must be installed inside the venv — not system Python — or `_PYWT_AVAILABLE` will be False and the wavelet method will silently produce zeros.
+**Always use a virtual environment.** Install all dependencies inside the venv, not system Python.
 
 **Backend (FastAPI, port 8000):**
 ```bash
@@ -36,19 +36,18 @@ cd frontend && npm run lint
 1. User selects a CSV/XLSX file with columns: time, flow, p_in, p_out
 2. **Calibration phase** (~400 samples / 20s of healthy baseline data) builds:
    - Baseline spectral fingerprint (FFT) for composite method
-   - Baseline wavelet detail-energy distribution (DWT) for wavelet method
    - Thresholds via `fft_threshold = percentile(baseline_composites, sigma_to_pct(sigma))` — percentile-based, not Gaussian
-3. **Real-time simulation**: WebSocket streams samples; backend computes all 5 scores per sample, sends every 10th frame (~2Hz effective rate)
-4. Active ML models receive `[static_score, composite_score, turbulence_score, spectral_slope, wavelet_score]` and output clogging probability
+3. **Real-time simulation**: WebSocket streams samples; backend computes all 4 scores per sample, sends every 10th frame (~2Hz effective rate)
+4. Active ML models receive `[static_score, composite_score, turbulence_score, spectral_slope]` and output clogging probability
 5. Dashboard updates charts, traffic light (green/yellow/red), and ETA to failure
-6. **Batch mode**: processes entire file at once with tunable sigma parameter; shows all 5 method charts side-by-side for comparison
+6. **Batch mode**: processes entire file at once with tunable sigma parameter; shows all 4 method charts side-by-side for comparison
 
 ### Backend (`app/`)
 | File | Role |
 |------|------|
 | `main.py` | FastAPI app, all REST endpoints and WebSocket handler |
 | `engine.py` | `SimulationEngine` — orchestrates WebSocket streaming loop |
-| `backend.py` | `CloggingDetector` — core signal processing and all 5 scoring methods |
+| `backend.py` | `CloggingDetector` — core signal processing and all 4 scoring methods |
 | `dataloader.py` | `DataStreamer` — CSV/XLSX parsing with auto column detection |
 | `batch.py` | Batch analysis processing |
 | `models/registry.py` | `ModelRegistry` — dynamic model loading/hot-reload every 5s |
@@ -65,7 +64,7 @@ cd frontend && npm run lint
 | `hooks/useWebSocket.ts` | WebSocket + message batching via `requestAnimationFrame` (60 FPS flush) |
 | `components/Dashboard.tsx` | Main orchestrator component |
 | `components/ControlChart.tsx` | QA/QC control charts (used by both live and batch views) |
-| `components/Batchanalysis.tsx` | Batch processing UI — all 5 method charts + threshold crossing cards |
+| `components/Batchanalysis.tsx` | Batch processing UI — all 4 method charts + threshold crossing cards |
 | `components/ModelsTab.tsx` | ML model management UI |
 
 **Frontend stack:** React 19, TypeScript, Vite, Zustand, TanStack Query, Axios, Recharts.
@@ -100,9 +99,9 @@ To implement a custom model, subclass `BaseModel` from `app/models/base.py`. Req
 
 ---
 
-## The Five Detection Methods
+## The Four Detection Methods
 
-All methods are computed in `CloggingDetector.process_sample()` in `backend.py`. All five scores are included in the `_features` dict passed to ML models.
+All methods are computed in `CloggingDetector.process_sample()` in `backend.py`. All four scores are included in the `_features` dict passed to ML models.
 
 ### 1. Static (Hydraulic Head Deviation)
 `abs(current_window_mean - baseline_mean)`
@@ -130,32 +129,13 @@ Linear fit of `log(power)` vs `log(freq)` over 1 Hz–Nyquist.
 - Clogged / white-noise dominated: slope ≈ −1.0 to −1.5
 - Not threshold-based; used as a feature for ML models
 
-### 5. Wavelet (DWT Detail-Energy Distribution Shift)
-`CloggingDetector.calculate_wavelet_score(signal)` — requires PyWavelets (`pywt`).
-
-Uses `pywt.wavedec(signal, 'db4', level=4)` producing `[cA4, cD4, cD3, cD2, cD1]`.
-
-**Key design choice:** the approximation coefficient cA4 is **excluded** from the score. It captures slow bulk-flow variation that is stable regardless of clogging. Only the four detail levels `[cD4, cD3, cD2, cD1]` (low→high frequency turbulent scales) are used.
-
-Score = L1 distance between EMA-smoothed current detail-energy distribution and baseline:
-- Score ≈ 0 → detail energy cascade matches baseline (healthy)
-- Score → 2 → distribution fully inverted (maximum anomaly)
-
-**EMA smoothing (`_wavelet_ema_alpha = 0.05`):** cD4 has only ~12 DWT coefficients per 200-sample window — too few for a stable per-sample energy estimate. An EMA with α=0.05 smooths over ~20 samples (1s at 20Hz), suppressing noise while tracking sustained clogging shifts. Both calibration (EMA replayed over windows) and analysis use the same α so thresholds remain calibrated.
-
-Clogging shifts energy toward cD1/cD2 (high-frequency turbulence at the blockage site). This is complementary to Composite (which measures FFT shape in the frequency domain) — Wavelet measures energy redistribution across *scales* in the time-frequency domain.
-
-Threshold uses the same percentile approach as Composite, computed from `_sorted_wavelet_composites` (built from EMA-smoothed calibration scores).
-
-**If pywt is not installed in the active venv**, `_PYWT_AVAILABLE = False` and `calculate_wavelet_score` silently returns 0.0. Fix: `pip install PyWavelets` inside the venv.
-
 ---
 
 ## Non-obvious Behaviors
 
-**Threshold recalculation:** Changing sigma recalculates all three thresholds (static, composite, wavelet) using `np.percentile` on pre-sorted arrays — O(1), no re-calibration needed.
+**Threshold recalculation:** Changing sigma recalculates both thresholds (static, composite) using `np.percentile` on pre-sorted arrays — O(1), no re-calibration needed.
 
-**Calibration window density:** Step = `window_size // 20` (5% overlap), giving ~21 windows per calibration period. This produces a robust baseline distribution for both FFT and wavelet methods.
+**Calibration window density:** Step = `window_size // 20` (5% overlap), giving ~21 windows per calibration period. This produces a robust baseline distribution for the FFT method.
 
 **Batch ML inference:** `_apply_batch_ml()` in `batch.py` calls `predict_batch()` once per model over the full feature matrix — vectorised, orders of magnitude faster than per-sample inference.
 
@@ -181,7 +161,7 @@ Threshold uses the same percentile approach as Composite, computed from `_sorted
 
 This platform is Casper's master's thesis software artifact. Key confirmed finding: on a ~4h21m file (1.5M points), the composite method detects a **partial clogging event at ~1h06m** — evidenced by simultaneous step-down in flow rate (~5%) and permanent elevation in composite score. The static method did not trigger, confirming the composite method's superiority for early-stage partial blockage detection. Video footage review pending to confirm physical blockage at that timestamp.
 
-The five methods are designed for comparative evaluation in the thesis: which detects earliest, which has fewest false positives, and how they complement each other.
+The four methods are designed for comparative evaluation in the thesis: which detects earliest, which has fewest false positives, and how they complement each other.
 
 ---
 

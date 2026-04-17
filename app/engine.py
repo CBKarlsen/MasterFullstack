@@ -12,6 +12,9 @@ from .dataloader import DataStreamer
 
 CALIBRATION_SAMPLE_COUNT = 400  # Samples needed before calibration runs
 FRAME_SKIP_RATE = 10            # Send every Nth frame (20Hz → ~2Hz effective rate)
+DEFAULT_SAMPLING_HZ = 20.0      # Fallback when fs cannot be detected from timestamps
+MIN_VALID_DELTA_SEC = 0.0       # Exclude zero-length deltas (duplicate rows)
+MAX_VALID_DELTA_SEC = 60.0      # Exclude huge gaps (file breaks, missing data)
 
 
 class SimulationEngine:
@@ -21,6 +24,7 @@ class SimulationEngine:
         self.filepath = filepath
         self.delay = speed_delay
         self.running = False
+        self._sigma = sigma
         self.detector = CloggingDetector(sigma=sigma)
         self._frame_count = 0
 
@@ -43,6 +47,7 @@ class SimulationEngine:
 
         self.running = True
         calibration_buffer: list = []
+        calibration_times: list = []
         is_calibrating = True
         columns_sent = False
 
@@ -66,7 +71,10 @@ class SimulationEngine:
 
                 if is_calibrating:
                     calibration_buffer.append(dP)
-                    is_calibrating = await self._maybe_finish_calibration(websocket, calibration_buffer)
+                    calibration_times.append(t)
+                    is_calibrating = await self._maybe_finish_calibration(
+                        websocket, calibration_buffer, calibration_times
+                    )
                     payload = self._build_calibrating_payload(t, flow, dP, raw_data)
                 else:
                     payload = self._build_detection_payload(t, flow, dP, raw_data)
@@ -102,11 +110,17 @@ class SimulationEngine:
         available_columns = data_point.get("columns", [])
         return t, flow, p_in - p_out, raw_data, available_columns
 
-    async def _maybe_finish_calibration(self, websocket, buffer: list) -> bool:
+    async def _maybe_finish_calibration(
+        self, websocket, buffer: list, times: list
+    ) -> bool:
         """Run calibration when enough samples are collected. Returns is_still_calibrating."""
         if len(buffer) < CALIBRATION_SAMPLE_COUNT:
             return True
         try:
+            detected_fs = self._detect_sampling_rate(times)
+            self.detector = CloggingDetector(fs=detected_fs, sigma=self._sigma)
+            print(f"Detector initialized with fs={detected_fs} Hz")
+
             self.detector.calibrate(buffer)
             await websocket.send_json({"type": "status", "message": "Calibration Done"})
             await websocket.send_json({
@@ -116,12 +130,25 @@ class SimulationEngine:
                 "static_threshold": self.detector.critical_threshold,
                 "composite_baseline_mean": self.detector.baseline_composite_mean,
                 "composite_baseline_std": self.detector.baseline_composite_std,
+                "sampling_hz": detected_fs,
             })
         except Exception as e:
             print(f"Calibration failed: {e}")
             buffer.clear()
+            times.clear()
             return True
         return False
+
+    @staticmethod
+    def _detect_sampling_rate(times: list) -> float:
+        """Infer sampling frequency from median of timestamp deltas."""
+        if len(times) < 2:
+            return DEFAULT_SAMPLING_HZ
+        deltas = np.diff(times[:100])
+        valid = deltas[(deltas > MIN_VALID_DELTA_SEC) & (deltas < MAX_VALID_DELTA_SEC)]
+        if len(valid) == 0:
+            return DEFAULT_SAMPLING_HZ
+        return round(1.0 / float(np.median(valid)), 2)
 
     def _build_calibrating_payload(self, t: float, flow: float, dP: float, raw_data: Dict) -> Dict:
         return {
@@ -177,10 +204,8 @@ class SimulationEngine:
             "static_score": results.get("static", 0),
             "spectral_slope": results.get("spectral_slope", 0),
             "turbulence_score": results.get("turbulence", 0),
-            "wavelet_score": results.get("wavelet", 0),
             "limit_threshold": results.get("fft_threshold", self.detector.fft_threshold),
             "static_threshold": results.get("static_threshold", self.detector.critical_threshold),
-            "wavelet_threshold": results.get("wavelet_threshold", self.detector.wavelet_threshold),
             "current_sigma": results.get("current_sigma", self.detector.sigma),
             "traffic_light": results.get("light_color", "gray"),
             "light_msg": results.get("status_msg", ""),

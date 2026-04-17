@@ -15,10 +15,8 @@ export interface LogEntry {
   samplingHz: number;
   compositeThreshold: number;
   staticThreshold: number;
-  waveletThreshold: number;
   compositeCrossing: string | null;
   staticCrossing: string | null;
-  waveletCrossing: string | null;
   forecastOnset: string | null;
   forecastEtaSigma3: string | null;
   forecastEtaSigma4: string | null;
@@ -106,10 +104,8 @@ export function importFromCsv(csvText: string): number {
       samplingHz:           Number(get("samplingHz")),
       compositeThreshold:   Number(get("compositeThreshold")),
       staticThreshold:      Number(get("staticThreshold")),
-      waveletThreshold:     Number(get("waveletThreshold")),
       compositeCrossing:    parseStr(get("compositeCrossing")),
       staticCrossing:       parseStr(get("staticCrossing")),
-      waveletCrossing:      parseStr(get("waveletCrossing")),
       forecastOnset:        parseStr(get("forecastOnset")),
       forecastEtaSigma3:    parseStr(get("forecastEtaSigma3")),
       forecastEtaSigma4:    parseStr(get("forecastEtaSigma4")),

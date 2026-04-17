@@ -69,7 +69,7 @@ export function IFTrainingPanel({ onTrainComplete }: IFTrainingPanelProps) {
   const [files, setFiles] = useState<DataFile[]>([]);
   const [selectedFile, setSelectedFile] = useState<string>("");
   const [sigma, setSigma] = useState(3);
-  const [calibrationSeconds, setCalibrationSeconds] = useState(30);
+  const [calibrationSeconds, setCalibrationSeconds] = useState(120);
   const [nEstimators, setNEstimators] = useState(100);
   const [contamination, setContamination] = useState(0.05);
   const [training, setTraining] = useState(false);

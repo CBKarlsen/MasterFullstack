@@ -425,7 +425,7 @@ def _do_rf_training(
 def train_random_forest(
     file: str,
     sigma: float = 3.0,
-    calibration_seconds: float = 30.0,
+    calibration_seconds: float = 120.0,
     include_warnings: bool = False,
     n_estimators: int = 100,
     max_depth: Optional[int] = 8,
@@ -583,7 +583,7 @@ def _do_if_training(
 def train_isolation_forest(
     file: str,
     sigma: float = 3.0,
-    calibration_seconds: float = 30.0,
+    calibration_seconds: float = 120.0,
     n_estimators: int = 100,
     contamination: float = 0.05,
 ):
@@ -721,7 +721,7 @@ def list_data_files():
 async def analyze_file(
     file: str,
     sigma: float = 3.0,
-    calibration_seconds: float = 30.0,
+    calibration_seconds: float = 120.0,
 ):
     data_path = DATA_DIR / file
     if not data_path.exists():

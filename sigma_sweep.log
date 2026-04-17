@@ -1,0 +1,539 @@
+Found 10 file(s). Running sigma sweep [3, 4, 5] ...
+
+  Processing 04-04-LF.xlsx  σ=3 ... Streaming: /Users/casper/Semester 9/Master/Fullstack/data/04-04-LF.xlsx
+   -> Detected Speed: 1.00 Hz (step=1.0000s)
+   -> Found 8 numeric columns: ['Temperature TS outlet (Mean)', 'Temperature TS inlet (Mean)', 'Bypass temperature (Mean)', 'Tank temperature (Mean)', 'TS outlet pressure (Mean)']...
+Detected fs=1.0 Hz → need 240 samples for 240s calibration
+Batch analysis using fs=1.0 Hz, calibration=240 samples (240s)
+Thresholds recalculated (σ=3.0): Static=0.00724, Composite=0.00108
+Calibrated! Baseline composite: mean=0.000447, std=0.000245, n_windows=61
+  → fft_threshold (σ=3): 0.001080
+Batch complete: 18399 total, 18159 analysis points
+  Composite range: 5.067503784547417e-06 - 0.007586979579048515
+OK  (composite: 19.317 min  ETA: None min  best: power_law)
+  Processing 04-04-LF.xlsx  σ=4 ... Streaming: /Users/casper/Semester 9/Master/Fullstack/data/04-04-LF.xlsx
+   -> Detected Speed: 1.00 Hz (step=1.0000s)
+   -> Found 8 numeric columns: ['Temperature TS outlet (Mean)', 'Temperature TS inlet (Mean)', 'Bypass temperature (Mean)', 'Tank temperature (Mean)', 'TS outlet pressure (Mean)']...
+Detected fs=1.0 Hz → need 240 samples for 240s calibration
+Batch analysis using fs=1.0 Hz, calibration=240 samples (240s)
+Thresholds recalculated (σ=4.0): Static=0.00965, Composite=0.00108
+Calibrated! Baseline composite: mean=0.000447, std=0.000245, n_windows=61
+  → fft_threshold (σ=4): 0.001081
+Batch complete: 18399 total, 18159 analysis points
+  Composite range: 5.517218845936476e-06 - 0.0075892889665681584
+OK  (composite: 19.317 min  ETA: None min  best: power_law)
+  Processing 04-04-LF.xlsx  σ=5 ... Streaming: /Users/casper/Semester 9/Master/Fullstack/data/04-04-LF.xlsx
+   -> Detected Speed: 1.00 Hz (step=1.0000s)
+   -> Found 8 numeric columns: ['Temperature TS outlet (Mean)', 'Temperature TS inlet (Mean)', 'Bypass temperature (Mean)', 'Tank temperature (Mean)', 'TS outlet pressure (Mean)']...
+Detected fs=1.0 Hz → need 240 samples for 240s calibration
+Batch analysis using fs=1.0 Hz, calibration=240 samples (240s)
+Thresholds recalculated (σ=5.0): Static=0.01206, Composite=0.00108
+Calibrated! Baseline composite: mean=0.000447, std=0.000245, n_windows=61
+  → fft_threshold (σ=5): 0.001081
+Batch complete: 18399 total, 18159 analysis points
+  Composite range: 5.517218845936476e-06 - 0.0075892889665681584
+OK  (composite: 19.317 min  ETA: None min  best: power_law)
+  Processing 0709.csv  σ=3 ... Streaming: /Users/casper/Semester 9/Master/Fullstack/data/0709.csv
+   -> Detected Speed: 1.00 Hz (step=1.0000s)
+   -> Found 9 numeric columns: ['Temperature TS outlet (Mean)', 'Temperature TS inlet (Mean)', 'Bypass temperature (Mean)', 'Tank temperature (Mean)', 'TS outlet pressure (Mean)']...
+Detected fs=1.0 Hz → need 240 samples for 240s calibration
+Batch analysis using fs=1.0 Hz, calibration=240 samples (240s)
+Thresholds recalculated (σ=3.0): Static=0.00228, Composite=0.00845
+Calibrated! Baseline composite: mean=0.002682, std=0.002196, n_windows=61
+  → fft_threshold (σ=3): 0.008453
+Batch complete: 1736 total, 1496 analysis points
+  Composite range: 0.00017111424900635898 - 0.9470232856669439
+OK  (composite: 29.05 min  ETA: 34.016 min  best: exponential)
+  Processing 0709.csv  σ=4 ... Streaming: /Users/casper/Semester 9/Master/Fullstack/data/0709.csv
+   -> Detected Speed: 1.00 Hz (step=1.0000s)
+   -> Found 9 numeric columns: ['Temperature TS outlet (Mean)', 'Temperature TS inlet (Mean)', 'Bypass temperature (Mean)', 'Tank temperature (Mean)', 'TS outlet pressure (Mean)']...
+Detected fs=1.0 Hz → need 240 samples for 240s calibration
+Batch analysis using fs=1.0 Hz, calibration=240 samples (240s)
+Thresholds recalculated (σ=4.0): Static=0.00304, Composite=0.00846
+Calibrated! Baseline composite: mean=0.002682, std=0.002196, n_windows=61
+  → fft_threshold (σ=4): 0.008463
+Batch complete: 1736 total, 1496 analysis points
+  Composite range: 0.00017111424900635898 - 0.9470224718855151
+OK  (composite: 29.05 min  ETA: 34.006 min  best: exponential)
+  Processing 0709.csv  σ=5 ... Streaming: /Users/casper/Semester 9/Master/Fullstack/data/0709.csv
+   -> Detected Speed: 1.00 Hz (step=1.0000s)
+   -> Found 9 numeric columns: ['Temperature TS outlet (Mean)', 'Temperature TS inlet (Mean)', 'Bypass temperature (Mean)', 'Tank temperature (Mean)', 'TS outlet pressure (Mean)']...
+Detected fs=1.0 Hz → need 240 samples for 240s calibration
+Batch analysis using fs=1.0 Hz, calibration=240 samples (240s)
+Thresholds recalculated (σ=5.0): Static=0.00380, Composite=0.00846
+Calibrated! Baseline composite: mean=0.002682, std=0.002196, n_windows=61
+  → fft_threshold (σ=5): 0.008463
+Batch complete: 1736 total, 1496 analysis points
+  Composite range: 0.00017111424900635898 - 0.9470224718855151
+OK  (composite: 29.05 min  ETA: 34.006 min  best: exponential)
+  Processing 11-12.xlsx  σ=3 ... Streaming: /Users/casper/Semester 9/Master/Fullstack/data/11-12.xlsx
+   -> Detected Speed: 1.05 Hz (step=0.9490s)
+   -> Found 16 numeric columns: ['Pressure before pump (Arith. Mean)', 'Pressure after pump (Arith. Mean)', 'Differential pressure (Arith. Mean)', 'Flow rate (Arith. Mean)', 'Tank temperature (Arith. Mean)']...
+Detected fs=1.11 Hz → need 266 samples for 240s calibration
+Batch analysis using fs=1.11 Hz, calibration=266 samples (240s)
+Thresholds recalculated (σ=3.0): Static=0.00393, Composite=0.00059
+Calibrated! Baseline composite: mean=0.000225, std=0.000164, n_windows=67
+  → fft_threshold (σ=3): 0.000592
+Batch complete: 6648 total, 6382 analysis points
+  Composite range: 1.571822478263016e-06 - 0.26483206640562623
+OK  (composite: 13.469 min  ETA: 250.83 min  best: exponential)
+  Processing 11-12.xlsx  σ=4 ... Streaming: /Users/casper/Semester 9/Master/Fullstack/data/11-12.xlsx
+   -> Detected Speed: 1.05 Hz (step=0.9490s)
+   -> Found 16 numeric columns: ['Pressure before pump (Arith. Mean)', 'Pressure after pump (Arith. Mean)', 'Differential pressure (Arith. Mean)', 'Flow rate (Arith. Mean)', 'Tank temperature (Arith. Mean)']...
+Detected fs=1.11 Hz → need 266 samples for 240s calibration
+Batch analysis using fs=1.11 Hz, calibration=266 samples (240s)
+Thresholds recalculated (σ=4.0): Static=0.00524, Composite=0.00059
+Calibrated! Baseline composite: mean=0.000225, std=0.000164, n_windows=67
+  → fft_threshold (σ=4): 0.000593
+Batch complete: 6648 total, 6382 analysis points
+  Composite range: 1.571809772713106e-06 - 0.2648320662454
+OK  (composite: 13.469 min  ETA: 250.925 min  best: exponential)
+  Processing 11-12.xlsx  σ=5 ... Streaming: /Users/casper/Semester 9/Master/Fullstack/data/11-12.xlsx
+   -> Detected Speed: 1.05 Hz (step=0.9490s)
+   -> Found 16 numeric columns: ['Pressure before pump (Arith. Mean)', 'Pressure after pump (Arith. Mean)', 'Differential pressure (Arith. Mean)', 'Flow rate (Arith. Mean)', 'Tank temperature (Arith. Mean)']...
+Detected fs=1.11 Hz → need 266 samples for 240s calibration
+Batch analysis using fs=1.11 Hz, calibration=266 samples (240s)
+Thresholds recalculated (σ=5.0): Static=0.00655, Composite=0.00059
+Calibrated! Baseline composite: mean=0.000225, std=0.000164, n_windows=67
+  → fft_threshold (σ=5): 0.000593
+Batch complete: 6648 total, 6382 analysis points
+  Composite range: 1.571809772713106e-06 - 0.2648320662454
+OK  (composite: 13.469 min  ETA: 250.925 min  best: exponential)
+  Processing 18-11-LF.xlsx  σ=3 ... Streaming: /Users/casper/Semester 9/Master/Fullstack/data/18-11-LF.xlsx
+   -> Detected Speed: 1.00 Hz (step=1.0000s)
+   -> Found 8 numeric columns: ['Temperature TS outlet (Mean)', 'Temperature TS inlet (Mean)', 'Bypass temperature (Mean)', 'Tank temperature (Mean)', 'TS outlet pressure (Mean)']...
+Detected fs=1.0 Hz → need 240 samples for 240s calibration
+Batch analysis using fs=1.0 Hz, calibration=240 samples (240s)
+Thresholds recalculated (σ=3.0): Static=0.22320, Composite=1.20772
+Calibrated! Baseline composite: mean=0.243110, std=0.306662, n_windows=61
+  → fft_threshold (σ=3): 1.207723
+Batch complete: 2195 total, 1955 analysis points
+  Composite range: 0.0008861749057075958 - 0.8540574182993579
+OK  (composite: None min  ETA:  min  best: )
+  Processing 18-11-LF.xlsx  σ=4 ... Streaming: /Users/casper/Semester 9/Master/Fullstack/data/18-11-LF.xlsx
+   -> Detected Speed: 1.00 Hz (step=1.0000s)
+   -> Found 8 numeric columns: ['Temperature TS outlet (Mean)', 'Temperature TS inlet (Mean)', 'Bypass temperature (Mean)', 'Tank temperature (Mean)', 'TS outlet pressure (Mean)']...
+Detected fs=1.0 Hz → need 240 samples for 240s calibration
+Batch analysis using fs=1.0 Hz, calibration=240 samples (240s)
+Thresholds recalculated (σ=4.0): Static=0.29761, Composite=1.21047
+Calibrated! Baseline composite: mean=0.243110, std=0.306662, n_windows=61
+  → fft_threshold (σ=4): 1.210470
+Batch complete: 2195 total, 1955 analysis points
+  Composite range: 0.0008861749057075958 - 0.8540574182993579
+OK  (composite: None min  ETA:  min  best: )
+  Processing 18-11-LF.xlsx  σ=5 ... Streaming: /Users/casper/Semester 9/Master/Fullstack/data/18-11-LF.xlsx
+   -> Detected Speed: 1.00 Hz (step=1.0000s)
+   -> Found 8 numeric columns: ['Temperature TS outlet (Mean)', 'Temperature TS inlet (Mean)', 'Bypass temperature (Mean)', 'Tank temperature (Mean)', 'TS outlet pressure (Mean)']...
+Detected fs=1.0 Hz → need 240 samples for 240s calibration
+Batch analysis using fs=1.0 Hz, calibration=240 samples (240s)
+Thresholds recalculated (σ=5.0): Static=0.37201, Composite=1.21047
+Calibrated! Baseline composite: mean=0.243110, std=0.306662, n_windows=61
+  → fft_threshold (σ=5): 1.210470
+Batch complete: 2195 total, 1955 analysis points
+  Composite range: 0.0008861749057075958 - 0.8540574182993579
+OK  (composite: None min  ETA:  min  best: )
+  Processing 2108-2.csv  σ=3 ... Streaming: /Users/casper/Semester 9/Master/Fullstack/data/2108-2.csv
+   -> Detected Speed: 0.40 Hz (step=2.4990s)
+   -> Found 9 numeric columns: ['Pressure before pump (Arith. Mean)', 'Pressure after pump (Arith. Mean)', 'Differential pressure (Arith. Mean)', 'Flow rate (Arith. Mean)', 'Tank temperature (Arith. Mean)']...
+Detected fs=0.4 Hz → need 96 samples for 240s calibration
+Batch analysis using fs=0.4 Hz, calibration=96 samples (240s)
+Thresholds recalculated (σ=3.0): Static=0.00645, Composite=0.00146
+Calibrated! Baseline composite: mean=0.000406, std=0.000376, n_windows=73
+  → fft_threshold (σ=3): 0.001462
+Batch complete: 1037 total, 941 analysis points
+  Composite range: 3.6960562689862316e-06 - 0.1962626474879387
+OK  (composite: 4.541 min  ETA: 40.198 min  best: linear)
+  Processing 2108-2.csv  σ=4 ... Streaming: /Users/casper/Semester 9/Master/Fullstack/data/2108-2.csv
+   -> Detected Speed: 0.40 Hz (step=2.4990s)
+   -> Found 9 numeric columns: ['Pressure before pump (Arith. Mean)', 'Pressure after pump (Arith. Mean)', 'Differential pressure (Arith. Mean)', 'Flow rate (Arith. Mean)', 'Tank temperature (Arith. Mean)']...
+Detected fs=0.4 Hz → need 96 samples for 240s calibration
+Batch analysis using fs=0.4 Hz, calibration=96 samples (240s)
+Thresholds recalculated (σ=4.0): Static=0.00860, Composite=0.00146
+Calibrated! Baseline composite: mean=0.000406, std=0.000376, n_windows=73
+  → fft_threshold (σ=4): 0.001464
+Batch complete: 1037 total, 941 analysis points
+  Composite range: 3.6960562689862316e-06 - 0.1962626474879387
+OK  (composite: 4.541 min  ETA: 40.203 min  best: linear)
+  Processing 2108-2.csv  σ=5 ... Streaming: /Users/casper/Semester 9/Master/Fullstack/data/2108-2.csv
+   -> Detected Speed: 0.40 Hz (step=2.4990s)
+   -> Found 9 numeric columns: ['Pressure before pump (Arith. Mean)', 'Pressure after pump (Arith. Mean)', 'Differential pressure (Arith. Mean)', 'Flow rate (Arith. Mean)', 'Tank temperature (Arith. Mean)']...
+Detected fs=0.4 Hz → need 96 samples for 240s calibration
+Batch analysis using fs=0.4 Hz, calibration=96 samples (240s)
+Thresholds recalculated (σ=5.0): Static=0.01075, Composite=0.00146
+Calibrated! Baseline composite: mean=0.000406, std=0.000376, n_windows=73
+  → fft_threshold (σ=5): 0.001464
+Batch complete: 1037 total, 941 analysis points
+  Composite range: 3.6960562689862316e-06 - 0.1962626474879387
+OK  (composite: 4.541 min  ETA: 40.203 min  best: linear)
+  Processing 25-03-LF.xlsx  σ=3 ... Streaming: /Users/casper/Semester 9/Master/Fullstack/data/25-03-LF.xlsx
+   -> Detected Speed: 1.00 Hz (step=1.0000s)
+   -> Found 8 numeric columns: ['Temperature TS outlet (Mean)', 'Temperature TS inlet (Mean)', 'Bypass temperature (Mean)', 'Tank temperature (Mean)', 'TS outlet pressure (Mean)']...
+Detected fs=1.0 Hz → need 240 samples for 240s calibration
+Batch analysis using fs=1.0 Hz, calibration=240 samples (240s)
+Thresholds recalculated (σ=3.0): Static=0.00162, Composite=0.00136
+Calibrated! Baseline composite: mean=0.000452, std=0.000342, n_windows=61
+  → fft_threshold (σ=3): 0.001361
+Batch complete: 14509 total, 14269 analysis points
+  Composite range: 2.3997055613384534e-05 - 0.0920615343697764
+OK  (composite: 4.983 min  ETA: 4266.487 min  best: exponential)
+  Processing 25-03-LF.xlsx  σ=4 ... Streaming: /Users/casper/Semester 9/Master/Fullstack/data/25-03-LF.xlsx
+   -> Detected Speed: 1.00 Hz (step=1.0000s)
+   -> Found 8 numeric columns: ['Temperature TS outlet (Mean)', 'Temperature TS inlet (Mean)', 'Bypass temperature (Mean)', 'Tank temperature (Mean)', 'TS outlet pressure (Mean)']...
+Detected fs=1.0 Hz → need 240 samples for 240s calibration
+Batch analysis using fs=1.0 Hz, calibration=240 samples (240s)
+Thresholds recalculated (σ=4.0): Static=0.00216, Composite=0.00136
+Calibrated! Baseline composite: mean=0.000452, std=0.000342, n_windows=61
+  → fft_threshold (σ=4): 0.001362
+Batch complete: 14509 total, 14269 analysis points
+  Composite range: 2.3997055613384534e-05 - 0.09206152660925265
+OK  (composite: 4.983 min  ETA: 4290.051 min  best: exponential)
+  Processing 25-03-LF.xlsx  σ=5 ... Streaming: /Users/casper/Semester 9/Master/Fullstack/data/25-03-LF.xlsx
+   -> Detected Speed: 1.00 Hz (step=1.0000s)
+   -> Found 8 numeric columns: ['Temperature TS outlet (Mean)', 'Temperature TS inlet (Mean)', 'Bypass temperature (Mean)', 'Tank temperature (Mean)', 'TS outlet pressure (Mean)']...
+Detected fs=1.0 Hz → need 240 samples for 240s calibration
+Batch analysis using fs=1.0 Hz, calibration=240 samples (240s)
+Thresholds recalculated (σ=5.0): Static=0.00270, Composite=0.00136
+Calibrated! Baseline composite: mean=0.000452, std=0.000342, n_windows=61
+  → fft_threshold (σ=5): 0.001362
+Batch complete: 14509 total, 14269 analysis points
+  Composite range: 2.3997055613384534e-05 - 0.09206152660925265
+OK  (composite: 4.983 min  ETA: 4290.051 min  best: exponential)
+  Processing 27-01-23-LF.xlsx  σ=3 ... Streaming: /Users/casper/Semester 9/Master/Fullstack/data/27-01-23-LF.xlsx
+   -> Detected Speed: 1.00 Hz (step=1.0000s)
+   -> Found 8 numeric columns: ['Temperature TS outlet (Mean)', 'Temperature TS inlet (Mean)', 'Bypass temperature (Mean)', 'Tank temperature (Mean)', 'TS outlet pressure (Mean)']...
+Detected fs=1.0 Hz → need 240 samples for 240s calibration
+Batch analysis using fs=1.0 Hz, calibration=240 samples (240s)
+Thresholds recalculated (σ=3.0): Static=0.24167, Composite=0.05929
+Calibrated! Baseline composite: mean=0.011201, std=0.014022, n_windows=61
+  → fft_threshold (σ=3): 0.059295
+Batch complete: 3234 total, 2994 analysis points
+  Composite range: 0.00017878731610613985 - 1.2100033450277148
+OK  (composite: 16.25 min  ETA: 82.798 min  best: exponential)
+  Processing 27-01-23-LF.xlsx  σ=4 ... Streaming: /Users/casper/Semester 9/Master/Fullstack/data/27-01-23-LF.xlsx
+   -> Detected Speed: 1.00 Hz (step=1.0000s)
+   -> Found 8 numeric columns: ['Temperature TS outlet (Mean)', 'Temperature TS inlet (Mean)', 'Bypass temperature (Mean)', 'Tank temperature (Mean)', 'TS outlet pressure (Mean)']...
+Detected fs=1.0 Hz → need 240 samples for 240s calibration
+Batch analysis using fs=1.0 Hz, calibration=240 samples (240s)
+Thresholds recalculated (σ=4.0): Static=0.32222, Composite=0.05934
+Calibrated! Baseline composite: mean=0.011201, std=0.014022, n_windows=61
+  → fft_threshold (σ=4): 0.059340
+Batch complete: 3234 total, 2994 analysis points
+  Composite range: 0.00017878731610613985 - 1.2100033450277148
+OK  (composite: 16.25 min  ETA: 82.806 min  best: exponential)
+  Processing 27-01-23-LF.xlsx  σ=5 ... Streaming: /Users/casper/Semester 9/Master/Fullstack/data/27-01-23-LF.xlsx
+   -> Detected Speed: 1.00 Hz (step=1.0000s)
+   -> Found 8 numeric columns: ['Temperature TS outlet (Mean)', 'Temperature TS inlet (Mean)', 'Bypass temperature (Mean)', 'Tank temperature (Mean)', 'TS outlet pressure (Mean)']...
+Detected fs=1.0 Hz → need 240 samples for 240s calibration
+Batch analysis using fs=1.0 Hz, calibration=240 samples (240s)
+Thresholds recalculated (σ=5.0): Static=0.40278, Composite=0.05934
+Calibrated! Baseline composite: mean=0.011201, std=0.014022, n_windows=61
+  → fft_threshold (σ=5): 0.059340
+Batch complete: 3234 total, 2994 analysis points
+  Composite range: 0.00017878731610613985 - 1.2100033450277148
+OK  (composite: 16.25 min  ETA: 82.806 min  best: exponential)
+  Processing 29-06-LF.xlsx  σ=3 ... Streaming: /Users/casper/Semester 9/Master/Fullstack/data/29-06-LF.xlsx
+   -> Detected Speed: 1.00 Hz (step=1.0000s)
+   -> Found 8 numeric columns: ['Temperature TS outlet (Mean)', 'Temperature TS inlet (Mean)', 'Bypass temperature (Mean)', 'Tank temperature (Mean)', 'TS outlet pressure (Mean)']...
+Detected fs=1.0 Hz → need 240 samples for 240s calibration
+Batch analysis using fs=1.0 Hz, calibration=240 samples (240s)
+Thresholds recalculated (σ=3.0): Static=0.00146, Composite=0.01139
+Calibrated! Baseline composite: mean=0.004715, std=0.002868, n_windows=61
+  → fft_threshold (σ=3): 0.011390
+Batch complete: 7881 total, 7641 analysis points
+  Composite range: 0.0006199811521633736 - 1.3493122740495214
+OK  (composite: 36.183 min  ETA: None min  best: linear)
+  Processing 29-06-LF.xlsx  σ=4 ... Streaming: /Users/casper/Semester 9/Master/Fullstack/data/29-06-LF.xlsx
+   -> Detected Speed: 1.00 Hz (step=1.0000s)
+   -> Found 8 numeric columns: ['Temperature TS outlet (Mean)', 'Temperature TS inlet (Mean)', 'Bypass temperature (Mean)', 'Tank temperature (Mean)', 'TS outlet pressure (Mean)']...
+Detected fs=1.0 Hz → need 240 samples for 240s calibration
+Batch analysis using fs=1.0 Hz, calibration=240 samples (240s)
+Thresholds recalculated (σ=4.0): Static=0.00194, Composite=0.01141
+Calibrated! Baseline composite: mean=0.004715, std=0.002868, n_windows=61
+  → fft_threshold (σ=4): 0.011409
+Batch complete: 7881 total, 7641 analysis points
+  Composite range: 0.0006199811521633736 - 1.3492991251618134
+OK  (composite: 36.183 min  ETA: None min  best: linear)
+  Processing 29-06-LF.xlsx  σ=5 ... Streaming: /Users/casper/Semester 9/Master/Fullstack/data/29-06-LF.xlsx
+   -> Detected Speed: 1.00 Hz (step=1.0000s)
+   -> Found 8 numeric columns: ['Temperature TS outlet (Mean)', 'Temperature TS inlet (Mean)', 'Bypass temperature (Mean)', 'Tank temperature (Mean)', 'TS outlet pressure (Mean)']...
+Detected fs=1.0 Hz → need 240 samples for 240s calibration
+Batch analysis using fs=1.0 Hz, calibration=240 samples (240s)
+Thresholds recalculated (σ=5.0): Static=0.00243, Composite=0.01141
+Calibrated! Baseline composite: mean=0.004715, std=0.002868, n_windows=61
+  → fft_threshold (σ=5): 0.011409
+Batch complete: 7881 total, 7641 analysis points
+  Composite range: 0.0006199811521633736 - 1.3492991251618134
+OK  (composite: 36.183 min  ETA: None min  best: linear)
+  Processing Experiment1  σ=3 ... Pipeline: Queued 14 files.
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_005.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Detected fs=100.0 Hz → need 24000 samples for 240s calibration
+Batch analysis using fs=100.0 Hz, calibration=24000 samples (240s)
+Thresholds recalculated (σ=3.0): Static=0.01151, Composite=0.02761
+Calibrated! Baseline composite: mean=0.025165, std=0.001178, n_windows=61
+  → fft_threshold (σ=3): 0.027613
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_006.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_007.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_008.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_009.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_010.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_011.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_012.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_013.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_014.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_015.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_016.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_017.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_018.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Batch complete: 1560308 total, 1536308 analysis points
+  Composite range: 0.02686441370340909 - 0.05565642079160914
+OK  (composite: 5.004 min  ETA: None min  best: power_law)
+  Processing Experiment1  σ=4 ... Pipeline: Queued 14 files.
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_005.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Detected fs=100.0 Hz → need 24000 samples for 240s calibration
+Batch analysis using fs=100.0 Hz, calibration=24000 samples (240s)
+Thresholds recalculated (σ=4.0): Static=0.01534, Composite=0.02761
+Calibrated! Baseline composite: mean=0.025165, std=0.001178, n_windows=61
+  → fft_threshold (σ=4): 0.027613
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_006.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_007.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_008.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_009.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_010.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_011.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_012.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_013.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_014.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_015.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_016.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_017.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_018.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Batch complete: 1560308 total, 1536308 analysis points
+  Composite range: 0.02686441370340909 - 0.05565642079160914
+OK  (composite: 5.004 min  ETA: None min  best: power_law)
+  Processing Experiment1  σ=5 ... Pipeline: Queued 14 files.
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_005.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Detected fs=100.0 Hz → need 24000 samples for 240s calibration
+Batch analysis using fs=100.0 Hz, calibration=24000 samples (240s)
+Thresholds recalculated (σ=5.0): Static=0.01918, Composite=0.02761
+Calibrated! Baseline composite: mean=0.025165, std=0.001178, n_windows=61
+  → fft_threshold (σ=5): 0.027613
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_006.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_007.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_008.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_009.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_010.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_011.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_012.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_013.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_014.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_015.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_016.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_017.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment1/17-03-high_018.csv
+   -> Detected Speed: 100.00 Hz (step=0.0100s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Batch complete: 1560308 total, 1536308 analysis points
+  Composite range: 0.02686441370340909 - 0.05565642079160914
+OK  (composite: 5.004 min  ETA: None min  best: power_law)
+  Processing Experiment2 copy  σ=3 ... Pipeline: Queued 10 files.
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_005.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Detected fs=20.0 Hz → need 4800 samples for 240s calibration
+Batch analysis using fs=20.0 Hz, calibration=4800 samples (240s)
+Thresholds recalculated (σ=3.0): Static=0.00534, Composite=0.01841
+Calibrated! Baseline composite: mean=0.012387, std=0.002498, n_windows=61
+  → fft_threshold (σ=3): 0.018411
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_006.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_007.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_008.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_009.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_010.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_011.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_012.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_013.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_014.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Batch complete: 232253 total, 227453 analysis points
+  Composite range: 0.009777614804232075 - 0.9588000075225327
+OK  (composite: 25.966 min  ETA: 130.096 min  best: linear)
+  Processing Experiment2 copy  σ=4 ... Pipeline: Queued 10 files.
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_005.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Detected fs=20.0 Hz → need 4800 samples for 240s calibration
+Batch analysis using fs=20.0 Hz, calibration=4800 samples (240s)
+Thresholds recalculated (σ=4.0): Static=0.00712, Composite=0.01843
+Calibrated! Baseline composite: mean=0.012387, std=0.002498, n_windows=61
+  → fft_threshold (σ=4): 0.018426
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_006.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_007.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_008.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_009.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_010.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_011.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_012.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_013.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_014.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Batch complete: 232253 total, 227453 analysis points
+  Composite range: 0.009777614804232075 - 0.9588000075225327
+OK  (composite: 25.966 min  ETA: 130.103 min  best: linear)
+  Processing Experiment2 copy  σ=5 ... Pipeline: Queued 10 files.
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_005.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Detected fs=20.0 Hz → need 4800 samples for 240s calibration
+Batch analysis using fs=20.0 Hz, calibration=4800 samples (240s)
+Thresholds recalculated (σ=5.0): Static=0.00889, Composite=0.01843
+Calibrated! Baseline composite: mean=0.012387, std=0.002498, n_windows=61
+  → fft_threshold (σ=5): 0.018426
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_006.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_007.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_008.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_009.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_010.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_011.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_012.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_013.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Streaming: /Users/casper/Semester 9/Master/Fullstack/data/Experiment2 copy/10-03-high_014.csv
+   -> Detected Speed: 20.00 Hz (step=0.0500s)
+   -> Found 8 numeric columns: ['Flow rate (Mean)', 'TS outlet pressure (Mean)', 'TS inlet pressure (Mean)', 'Pump outlet pressure (Mean)', 'Temperature TS outlet (Mean)']...
+Batch complete: 232253 total, 227453 analysis points
+  Composite range: 0.009777614804232075 - 0.9588000075225327
+OK  (composite: 25.966 min  ETA: 130.103 min  best: linear)
+
+Done. Results written to: /Users/casper/Semester 9/Master/Fullstack/sigma_sweep_results.csv
+  30 rows  (10 files × 3 sigmas)

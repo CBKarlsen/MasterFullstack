@@ -31,10 +31,9 @@ Sensor data (CSV/Excel)
           │
           ▼
 ┌───────────────────────────────────────┐
-│  5 Detection Methods (run in parallel) │
+│  4 Detection Methods (run in parallel) │
 │  • Static       • Composite (FFT)     │
 │  • Turbulence   • Spectral Slope      │
-│  • Wavelet                            │
 └─────────┬─────────────────────────────┘
           │
           ▼
@@ -102,7 +101,7 @@ A simple pressure alarm only fires when the *average* pressure drop changes by a
 
 ---
 
-## The Five Detection Methods
+## The Four Detection Methods
 
 Each method looks at a different physical aspect of the flow. They are designed to complement each other — no single method is perfect, but together they provide strong evidence.
 
@@ -156,18 +155,6 @@ Each method looks at a different physical aspect of the flow. They are designed 
 
 ---
 
-### 5. Wavelet — Detail-Energy Distribution Shift
-
-**What it measures:** How the distribution of energy across different time scales has shifted from the baseline.
-
-**Physics:** FFT breaks the signal into fixed frequencies. Wavelets go further — they break the signal into both frequency *and* time scales, similar to how a spectrogram works for audio. This lets the platform detect changes in energy at specific time scales (e.g., energy shifting from slow variations to fast bursts).
-
-**How it works:** Uses the Daubechies db4 wavelet at 4 decomposition levels, producing four "detail" coefficient arrays that capture energy at different scales. The score is the L1 distance between the current energy distribution across these scales and the baseline distribution.
-
-**Note:** Requires PyWavelets (`pip install PyWavelets` inside the virtual environment).
-
----
-
 ## Clogging Trajectory Forecast
 
 Once a detection method crosses its threshold, the platform automatically fits three mathematical growth models to the composite score trajectory after onset, and projects when the score will reach a critical level (default: 2× the detection threshold).
@@ -188,7 +175,7 @@ Each model reports its R² (goodness of fit) and estimated time to critical thre
 
 Two ML models are built in:
 
-**Random Forest** (supervised): Trained on labeled data (healthy vs. clogged samples). Takes the 5 detection method scores as input and outputs a clogging probability. Train it in the Models tab by uploading a labeled CSV.
+**Random Forest** (supervised): Trained on labeled data (healthy vs. clogged samples). Takes the 4 detection method scores as input and outputs a clogging probability. Train it in the Models tab by uploading a labeled CSV.
 
 **Isolation Forest** (unsupervised): Trained only on healthy data — no labels needed. Identifies samples that are anomalous compared to normal flow. Useful when you don't have labeled clogging events.
 
@@ -218,8 +205,6 @@ pip install -r requirements.txt
 # Start the backend (port 8000)
 python -m app.main
 ```
-
-> **Important:** PyWavelets must be installed inside the virtual environment, not system Python. If the wavelet method produces zeros, run `pip install PyWavelets` inside the activated venv.
 
 ### Frontend
 
@@ -252,7 +237,7 @@ Additional columns are passed through to the dashboard as raw data.
 ├── app/
 │   ├── main.py          # FastAPI app and all API endpoints
 │   ├── engine.py        # WebSocket streaming simulation loop
-│   ├── backend.py       # Core signal processing and 5 detection methods
+│   ├── backend.py       # Core signal processing and 4 detection methods
 │   ├── batch.py         # Batch analysis (full-file processing)
 │   ├── forecast.py      # Clogging trajectory growth model fitting
 │   ├── dataloader.py    # CSV/Excel parsing with auto column detection
@@ -273,7 +258,7 @@ Additional columns are passed through to the dashboard as raw data.
 | Layer | Technology |
 |-------|-----------|
 | Backend API | FastAPI (Python) |
-| Signal processing | NumPy, SciPy, PyWavelets |
+| Signal processing | NumPy, SciPy |
 | ML models | scikit-learn, PyTorch, TensorFlow |
 | Frontend | React 19 + TypeScript + Vite |
 | State management | Zustand |

@@ -31,7 +31,6 @@ export interface AnalysisPoint {
   composite_score: number;
   turbulence_score: number;
   spectral_slope: number;
-  wavelet_score: number;
   traffic_light: string;
   light_msg: string;
   ensemble_probability: number;

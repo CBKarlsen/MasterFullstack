@@ -76,7 +76,6 @@ function buildColumns(onUpdateActualTime: (e: LogEntry, v: string | null) => voi
     COL.accessor("durationMin",        { header: "Duration",  cell: (i) => `${i.getValue()} min`, size: 80 }),
     COL.accessor("compositeCrossing",  { header: "Composite onset", cell: (i) => i.getValue() ?? "—", size: 110 }),
     COL.accessor("staticCrossing",     { header: "Static onset",    cell: (i) => i.getValue() ?? "—", size: 100 }),
-    COL.accessor("waveletCrossing",    { header: "Wavelet onset",   cell: (i) => i.getValue() ?? "—", size: 105 }),
     COL.accessor("forecastEtaSigma3",  { header: "ETA σ=3", cell: (i) => i.getValue() ?? "—", size: 80 }),
     COL.accessor("forecastEtaSigma4",  { header: "ETA σ=4", cell: (i) => i.getValue() ?? "—", size: 80 }),
     COL.accessor("forecastEtaSigma5",  { header: "ETA σ=5", cell: (i) => i.getValue() ?? "—", size: 80 }),

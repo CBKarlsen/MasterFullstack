@@ -29,8 +29,6 @@ export interface CalibrationStats {
   baseline_std: number;
   composite_mean: number;
   composite_std: number;
-  wavelet_mean: number;
-  wavelet_std: number;
   samples_used: number;
 }
 
@@ -38,7 +36,6 @@ interface Thresholds {
   sigma: number;
   fft_threshold: number;
   static_threshold: number;
-  wavelet_threshold: number;
 }
 
 export interface AnalysisResult {
@@ -66,13 +63,11 @@ const SIGMA_OPTIONS = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
 interface CrossingTimes {
   static: number | null;
   composite: number | null;
-  wavelet: number | null;
 }
 
 interface ThresholdSet {
   fft_threshold: number;
   static_threshold: number;
-  wavelet_threshold: number;
 }
 
 function computeCrossings(
@@ -96,12 +91,7 @@ function computeCrossings(
     if (median > thresh.fft_threshold) { compositeCrossing = analysisPoints[i].time; break; }
   }
 
-  let waveletCrossing: number | null = null;
-  for (const p of analysisPoints) {
-    if ((p.wavelet_score ?? 0) > thresh.wavelet_threshold) { waveletCrossing = p.time; break; }
-  }
-
-  return { static: staticCrossing, composite: compositeCrossing, wavelet: waveletCrossing };
+  return { static: staticCrossing, composite: compositeCrossing };
 }
 
 function secToHHMMSS(seconds: number | null): string | null {
@@ -138,10 +128,8 @@ function buildLogEntry(input: LogEntryInput): LogEntry {
     samplingHz: result.metadata.sampling_hz,
     compositeThreshold: result.thresholds.fft_threshold,
     staticThreshold: result.thresholds.static_threshold,
-    waveletThreshold: result.thresholds.wavelet_threshold,
     compositeCrossing: secToHHMMSS(crossings.composite),
     staticCrossing: secToHHMMSS(crossings.static),
-    waveletCrossing: secToHHMMSS(crossings.wavelet),
     forecastOnset: forecast ? secToHHMMSS(forecast.onset_time) : null,
     forecastEtaSigma3: secToHHMMSS(sigmaForecasts[3 as SigmaValue].consensusEta),
     forecastEtaSigma4: secToHHMMSS(sigmaForecasts[4 as SigmaValue].consensusEta),
@@ -159,7 +147,7 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
   const [error, setError] = useState<string | null>(null);
   const [sigma, setSigma] = useState(3.0);
   const [thresholds, setThresholds] = useState<Thresholds | null>(null);
-  const [calibrationSeconds, setCalibrationSeconds] = useState(30);
+  const [calibrationSeconds, setCalibrationSeconds] = useState(120);
   const [smoothingWindowSec, setSmoothingWindowSec] = useState(60);
   const [criticalMultiplier, setCriticalMultiplier] = useState(2.0);
   const [logEntries, setLogEntries] = useState<LogEntry[]>(() => loadLog());
@@ -211,23 +199,17 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
       setSigma(newSigma);
       if (!result) return;
 
-      const { composite_mean, composite_std, baseline_std, wavelet_mean, wavelet_std } =
-        result.calibration;
+      const { composite_mean, composite_std, baseline_std } = result.calibration;
       const newFft =
         composite_std > 0
           ? composite_mean + newSigma * composite_std
           : Math.max(0.05, composite_mean * 5.0);
       const newStatic = newSigma * baseline_std;
-      const newWavelet =
-        wavelet_std > 0
-          ? wavelet_mean + newSigma * wavelet_std
-          : Math.max(0.05, wavelet_mean * 5.0);
 
       setThresholds({
         sigma: newSigma,
         fft_threshold: newFft,
         static_threshold: newStatic,
-        wavelet_threshold: newWavelet,
       });
     },
     [result],
@@ -238,7 +220,7 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
   // Both composite and compositeSmoothed share the same downsampled timestamps so
   // they can be safely zipped by index in ControlChart.
   const displayData = useMemo(() => {
-    if (!result) return { flow: [], static_: [], composite: [], compositeSmoothed: [], wavelet: [] };
+    if (!result) return { flow: [], static_: [], composite: [], compositeSmoothed: [] };
 
     const points = result.timeseries;
     const maxDisplay = 3000;
@@ -265,7 +247,6 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
     const static_: ControlChartDataPoint[] = [];
     const composite: ControlChartDataPoint[] = [];
     const compositeSmoothed: ControlChartDataPoint[] = [];
-    const wavelet: ControlChartDataPoint[] = [];
 
     for (let i = 0; i < points.length; i += step) {
       const p = points[i];
@@ -276,11 +257,10 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
         composite.push({ time: p.time, value: p.composite_score });
         const sm = rollingMeanByTime.get(p.time);
         compositeSmoothed.push({ time: p.time, value: sm ?? p.composite_score });
-        wavelet.push({ time: p.time, value: p.wavelet_score ?? 0 });
       }
     }
 
-    return { flow, static_, composite, compositeSmoothed, wavelet };
+    return { flow, static_, composite, compositeSmoothed };
   }, [result, smoothingWindowSec]);
 
   // Find when traffic light goes red (approximate clogging time)
@@ -291,11 +271,11 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
   }, [result]);
 
   // Find threshold crossing times — updates with sigma and smoothing window.
-  // Static/Wavelet: first raw sample above threshold.
+  // Static: first raw sample above threshold.
   // Composite: first rolling-median crossing (robust to transient spikes).
   const thresholdCrossings = useMemo(() => {
-    if (!result) return { static: null as number | null, composite: null as number | null, wavelet: null as number | null };
-    const thresh = thresholds ?? { sigma: 3.0, fft_threshold: 0.05, static_threshold: 0.018, wavelet_threshold: 0.8 };
+    if (!result) return { static: null as number | null, composite: null as number | null };
+    const thresh = thresholds ?? { sigma: 3.0, fft_threshold: 0.05, static_threshold: 0.018 };
     const analysisPoints = result.timeseries.filter((p) => p.phase === "analysis");
     return computeCrossings(analysisPoints, thresh, smoothingWindowSec);
   }, [result, thresholds, smoothingWindowSec]);
@@ -304,7 +284,6 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
     sigma: 3.0,
     fft_threshold: 0.05,
     static_threshold: 0.018,
-    wavelet_threshold: 0.8,
   };
 
   // Forecast recomputes whenever sigma/multiplier/smoothing/onset changes — no server round-trip needed
@@ -583,8 +562,7 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
                 }}
               >
                 Composite: {effectiveThresholds.fft_threshold.toFixed(6)} |
-                Static: {effectiveThresholds.static_threshold.toFixed(6)} |
-                Wavelet: {effectiveThresholds.wavelet_threshold.toFixed(6)}
+                Static: {effectiveThresholds.static_threshold.toFixed(6)}
               </span>
             </div>
             <div style={{ display: "flex", gap: "6px" }}>
@@ -656,7 +634,7 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
                 <span style={{ fontSize: "12px", color: "#6b7280" }}>s</span>
               </div>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
               <CrossingCard
                 label="Static — first raw sample above threshold"
                 time={thresholdCrossings.static}
@@ -668,12 +646,6 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
                 time={thresholdCrossings.composite}
                 threshold={effectiveThresholds.fft_threshold}
                 color="#800080"
-              />
-              <CrossingCard
-                label="Wavelet — first raw sample above threshold"
-                time={thresholdCrossings.wavelet}
-                threshold={effectiveThresholds.wavelet_threshold}
-                color="#0891b2"
               />
             </div>
           </div>
@@ -751,14 +723,6 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
               overlayData={displayData.compositeSmoothed}
               overlayColor="#f59e0b"
               overlayLabel={`Rolling mean (${smoothingWindowSec}s)`}
-            />
-            <ControlChart
-              title={`Method: WAVELET (σ=${sigma})`}
-              data={displayData.wavelet}
-              threshold={effectiveThresholds.wavelet_threshold}
-              color="#0891b2"
-              useLogScale={true}
-              height={220}
             />
             <ControlChart
               title="Flow Rate"

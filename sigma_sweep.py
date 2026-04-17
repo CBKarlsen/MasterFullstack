@@ -17,14 +17,43 @@ sys.path.insert(0, str(Path(__file__).parent))
 from app.batch import run_batch_analysis
 
 DATA_DIR = Path(__file__).parent / "data"
-SIGMAS = [4]   # full 3/4/5 sweep later; single sigma for initial overview
+SIGMAS = [3, 4, 5]
 OUTPUT_CSV = Path(__file__).parent / "sigma_sweep_results.csv"
 SUPPORTED_EXTENSIONS = {".xlsx", ".csv", ".xls"}
-SKIP_FILES = {"Book1.xlsx", "clogging results.xlsx"}   # empty / non-experiment files
+
+# Subdirectories treated as a single concatenated run (DataStreamer stitches timestamps).
+# Each directory contributes one row per sigma, not one row per split file.
+EXPERIMENT_DIRS = {"Experiment1", "Experiment2 copy"}
+SKIP_FILES = {
+    "Book1.xlsx",              # empty
+    "clogging results.xlsx",   # non-experiment
+    "7-12.xlsx",               # unstable composite across sigmas; excluded from evaluation
+    "2108-1.csv",              # 21.08 split 1 — discarded (mid-run spike removed by trimming)
+    "01-10.xlsx",              # logger gap mid-file — calibration baseline not valid post-gap
+    "11-03-LF.xlsx",           # fails to load in UI — excluded
+    "15-03-LF.xlsx",           # fails to load in UI — excluded
+    "13-10-LF.xlsx",           # multiple runs + no flow data + messy start — not salvageable without splitting
+    "14-07-LF.xlsx",           # multiple runs + no flow data — can't verify first-crossing minute
+    "06-12-LF.xlsx",           # multiple runs + no flow data — same as 14-07
+    "07-07-LF.xlsx",           # multiple runs + no flow data — same as 14-07
+    # 29.06.22 splits — too short for 120 s calibration; use combined 29-06-LF.xlsx instead
+    "29-06-LF-Run1.xlsx",
+    "29-06-LF-Run2.xlsx",
+    "2906-2.csv",
+    "2906-3.csv",
+    "2906-4.csv",
+    "30-06-LF.xlsx",           # multiple runs + no flow data
+    "3006-3.csv",              # run 3 split — too short for calibration
+    "2106-1.csv",              # 21.06 run 1 — too short for calibration
+    "2106-2.csv",               # 21.06 run 2 — likely too short; no composite crossing
+    "2401-1.csv",               # 24.01 split 1 — only 5 min, too short for calibration
+    "2401-2.csv",               # 24.01 split 2 — too short for calibration
+    "21-08.xlsx",               # early flow-rate hiccup triggers composite; use 2108-2.csv (clean half) instead
+}
 
 # Mirrors the smoothing window used in Batchanalysis.tsx computeCrossings().
 # Composite crossing = first point where rolling median over this window exceeds threshold.
-# Static and wavelet use raw first crossing (no smoothing), matching the UI.
+# Static uses raw first crossing (no smoothing), matching the UI.
 SMOOTHING_WINDOW_SEC = 60.0
 
 # Actual blockage times in minutes from file start, sourced from "Description of cases.docx".
@@ -33,73 +62,46 @@ SMOOTHING_WINDOW_SEC = 60.0
 NO_BLOCK = -1.0
 
 GROUND_TRUTH: dict[str, float | None] = {
-    # 21.08.21 — "Blockage in 70 minutes" (explicit)
-    "21-08.xlsx":         70.0,
-    "2108-1.csv":         None,   # split of 21.08 — multiple partial blockages
-    "2108-2.csv":         None,   # split of 21.08 — multiple partial blockages
-
-    # 01.10.21 — differential pressure test, orifice blocked at 600 kg/h
-    "01-10.xlsx":         None,
-
-    # 07.12.21 — "No Block!"
-    "7-12.xlsx":          NO_BLOCK,
+    # 21.08.21 — full file skipped (early hiccup); clean second half labeled below
+    "2108-2.csv":         44.0,   # clean second half of 21.08; clog at 44 min from split start
 
     # 11.12.21 — partial blockage (1500→1200 kg/h) visible at ~57 min in flow chart,
     # then full blockage (1200→500→0 kg/h) near end of file
     "11-12.xlsx":         57.0,
 
-    # 11.03.22 — partial blockage, gradual flow reduction
-    "11-03-LF.xlsx":      None,
+    # 25.03.22 — partial blockage (paper: "thin layer of deposit"). Flow 900→650 kg/h at 2:31.
+    # Ice loading on the tank raises baseline spectral variance — composite brushes threshold
+    # early (~13 min) before the real event, so first-crossing lead time is inflated.
+    "25-03-LF.xlsx":      151.0,
 
-    # 15.03.22 — loop blockage
-    "15-03-LF.xlsx":      None,
-
-    # 25.03.22 — thin deposit, explicitly "No Block!"
-    "25-03-LF.xlsx":      NO_BLOCK,
-
-    # 04.04.22 — "No blockages"
+    # 04.04.22 — "No blockages". Last 100 samples trimmed (manual flow shutoff tail).
     "04-04-LF.xlsx":      NO_BLOCK,
 
-    # 13.10.22 — loop blocked at 4.5 Hz
-    "13-10-LF.xlsx":      None,
-
-    # 27.01.23 — blockage of orifice and loop at 7 Hz
-    "27-01-23-LF.xlsx":   None,
-
-    # 14.07.22 — 4 runs, blockage in all
-    "14-07-LF.xlsx":      None,
+    # 27.01.23 — blockage of orifice and loop at 7 Hz, event at 54:44
+    "27-01-23-LF.xlsx":   54.733,
 
     # 18.11.22 — loop blockage at 6 Hz
     "18-11-LF.xlsx":      None,
 
-    # 06.12.22 — loop blockage (run 1), then orifice+loop (runs 2 & 3)
-    "06-12-LF.xlsx":      None,
-
-    # 07.07.22 — loop blocked outside test section in all 4 runs
-    "07-07-LF.xlsx":      None,
-
-    # 29.06.22 — 4 runs; blockage in runs 2/3/4 (run 1 = no blockage)
+    # 29.06.22 — 4 runs; blockage in runs 2/3/4 (run 1 = no blockage).
+    # Per-run splits skipped (too short for calibration); only the combined file is evaluated.
     "29-06-LF.xlsx":      None,
-    "29-06-LF-Run1.xlsx": NO_BLOCK,
-    "29-06-LF-Run2.xlsx": None,
-    "2906-2.csv":         None,
-    "2906-3.csv":         None,
-    "2906-4.csv":         None,
 
-    # 30.06.22 — 3 runs; blockage only in run 3
-    "30-06-LF.xlsx":      None,
-    "3006-3.csv":         None,
+    # 07.09.22 — test section blockage; video 39:34, file clock 29:54
+    "0709.csv":           29.9,
 
-    # 07.09.22 — test section blockage at 39:34 on video
-    "0709.csv":           None,
+    # 21.06.22 — 3 runs: loop blockage (run1), test section (run2), no blockage (run3).
+    # All per-run splits skipped (too short for calibration).
 
-    # 21.06.22 — 3 runs: loop blockage (run1), test section (run2), no blockage (run3)
-    "2106-1.csv":         None,
-    "2106-2.csv":         None,
+    # 24.01.23 — loop blockage. Both splits too short for calibration — all skipped.
 
-    # 24.01.23 — loop blockage
-    "2401-1.csv":         None,
-    "2401-2.csv":         None,
+    # 17.03 experiment — partial clogging at 1h06m, does not reach full blockage.
+    # Concatenated from Experiment1/17-03-high_005.csv through _018.csv.
+    "Experiment1":        66.0,
+
+    # 10.03 experiment — clear full blockage at 3h14m.
+    # Concatenated from "Experiment2 copy/10-03-high_005.csv" through ~_014.csv.
+    "Experiment2 copy":   194.0,
 }
 
 FIELDNAMES = [
@@ -108,14 +110,14 @@ FIELDNAMES = [
     # Ground truth
     "actual_blockage_min", "blockage_confirmed",
     # Thresholds
-    "fft_threshold", "static_threshold", "wavelet_threshold",
+    "fft_threshold", "static_threshold",
     # First threshold crossings
-    "composite_first_crossing_min", "static_first_crossing_min", "wavelet_first_crossing_min",
+    "composite_first_crossing_min", "static_first_crossing_min",
     # Lead times (actual_blockage - first_crossing; negative = premature / false alarm)
     "composite_lead_min", "static_lead_min",
     # Score statistics
-    "composite_max", "static_max", "wavelet_max",
-    "composite_crossings_count", "static_crossings_count", "wavelet_crossings_count",
+    "composite_max", "static_max",
+    "composite_crossings_count", "static_crossings_count",
     # Forecast summary
     "forecast_best_fit", "forecast_best_r2",
     "forecast_consensus_eta_min", "forecast_eta_lead_min",
@@ -130,14 +132,20 @@ FIELDNAMES = [
 
 
 def find_data_files() -> list[Path]:
-    """Recursively find all data files in DATA_DIR, skipping known non-experiment files."""
-    return sorted(
-        p for p in DATA_DIR.rglob("*")
-        if p.is_file()
-        and p.suffix.lower() in SUPPORTED_EXTENSIONS
-        and p.name not in SKIP_FILES
-        and not p.name.startswith("~$")
-    )
+    """Top-level data files + experiment directories (each treated as one virtual file).
+    Split files inside experiment dirs are NOT returned individually; DataStreamer
+    concatenates them when given the directory path.
+    """
+    items: list[Path] = []
+    for p in sorted(DATA_DIR.iterdir()):
+        if p.is_file():
+            if (p.suffix.lower() in SUPPORTED_EXTENSIONS
+                    and p.name not in SKIP_FILES
+                    and not p.name.startswith("~$")):
+                items.append(p)
+        elif p.is_dir() and p.name in EXPERIMENT_DIRS:
+            items.append(p)
+    return items
 
 
 def first_composite_crossing_min(
@@ -163,7 +171,7 @@ def first_composite_crossing_min(
 
 
 def first_raw_crossing_min(timeseries: list[dict], score_key: str, threshold: float) -> float | None:
-    """Raw first crossing — used for static and wavelet (no smoothing in UI)."""
+    """Raw first crossing — used for static (no smoothing in UI)."""
     for point in timeseries:
         if point.get("phase") != "analysis":
             continue
@@ -256,7 +264,6 @@ def extract_row(filename: str, sigma: float, result: dict) -> dict:
 
     fft_thr     = thresholds["fft_threshold"]
     static_thr  = thresholds["static_threshold"]
-    wavelet_thr = thresholds.get("wavelet_threshold", 0.0)
 
     # Look up by bare filename so subdirectory paths still match GROUND_TRUTH keys
     bare_name = Path(filename).name
@@ -286,18 +293,14 @@ def extract_row(filename: str, sigma: float, result: dict) -> dict:
         "blockage_confirmed":          blockage_confirmed,
         "fft_threshold":               round(fft_thr, 6),
         "static_threshold":            round(static_thr, 6),
-        "wavelet_threshold":           round(wavelet_thr, 6),
         "composite_first_crossing_min": comp_cross,
         "static_first_crossing_min":   stat_cross,
-        "wavelet_first_crossing_min":  first_raw_crossing_min(ts, "wavelet_score", wavelet_thr),
         "composite_lead_min":          _lead(actual_blockage, comp_cross),
         "static_lead_min":             _lead(actual_blockage, stat_cross),
         "composite_max":               max_score(ts, "composite_score"),
         "static_max":                  max_score(ts, "static_score"),
-        "wavelet_max":                 max_score(ts, "wavelet_score"),
         "composite_crossings_count":   count_crossings(ts, "composite_score", fft_thr),
         "static_crossings_count":      count_crossings(ts, "static_score", static_thr),
-        "wavelet_crossings_count":     count_crossings(ts, "wavelet_score", wavelet_thr),
         **forecast_fields,
         **flow_fields,
         "error": "",
