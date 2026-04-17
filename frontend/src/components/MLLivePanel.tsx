@@ -3,6 +3,7 @@ import axios from "axios";
 import type { SimulationData, ModelMetadata } from "../types";
 import { ToggleSwitch } from "./ui/ToggleSwitch";
 import { SectionLabel } from "./ui/SectionLabel";
+import { Tooltip } from "./ui/Tooltip";
 import { COLOR } from "../styles/tokens";
 
 interface MLLivePanelProps {
@@ -87,7 +88,7 @@ export function MLLivePanel({
           <SectionLabel>ML Predictions</SectionLabel>
           <div style={{ textAlign: "center", padding: "8px 0 4px" }}>
             <div style={{ fontSize: "13px", color: "#6b7280", marginBottom: "10px" }}>
-              Calibrating baseline…
+              Calibrating baseline (~20s) — do not stop the simulation
             </div>
             <div
               style={{
@@ -174,7 +175,9 @@ export function MLLivePanel({
               letterSpacing: "0.06em",
             }}
           >
-            Ensemble Score
+            <Tooltip text="Combined probability of a clogging event across all active ML models.">
+              Clogging Probability
+            </Tooltip>
           </span>
           <span
             style={{

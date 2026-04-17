@@ -15,6 +15,7 @@ import { BatchAnalysis } from "./BatchAnalysis";
 import { ModelsTab } from "./ModelsTab";
 import { LiveForecastPanel } from "./LiveForecastPanel";
 import { Button } from "./ui/Button";
+import { Tooltip } from "./ui/Tooltip";
 import { COLOR, FONT_SIZE, FONT_WEIGHT, RADIUS, SHADOW, SPACING } from "../styles/tokens";
 
 export function Dashboard() {
@@ -229,7 +230,9 @@ export function Dashboard() {
                         : "—"}
                     </div>
                     <div style={{ fontSize: "14px", color: "#6b7280" }}>
-                      Ensemble Probability
+                      <Tooltip text="Combined probability of a clogging event across all active ML models.">
+                        Clogging Probability
+                      </Tooltip>
                     </div>
                   </div>
                 </div>
@@ -252,14 +255,17 @@ export function Dashboard() {
                     />
                     <MetricBox
                       label="Spectral Slope"
+                      tooltip="Log-log slope of the power spectrum. Healthy flow: ~−2.5. A flatter slope (closer to 0) indicates turbulence from a blockage."
                       value={currentData.spectral_slope?.toFixed(2) || "—"}
                     />
                     <MetricBox
                       label="Static Score"
+                      tooltip="Sustained deviation of mean pressure from the healthy baseline. Detects full blockages but is slow to react to partial ones."
                       value={currentData.static_score?.toFixed(4) || "—"}
                     />
                     <MetricBox
-                      label="Composite"
+                      label="Composite Score"
+                      tooltip="L1 distance between the current FFT spectrum and the healthy baseline. Best method for detecting partial blockages early."
                       value={currentData.composite_score?.toFixed(4) || "—"}
                     />
                   </div>
@@ -376,10 +382,12 @@ export function Dashboard() {
   );
 }
 
-function MetricBox({ label, value }: { label: string; value: string }) {
+function MetricBox({ label, value, tooltip }: { label: string; value: string; tooltip?: string }) {
   return (
     <div>
-      <div style={{ fontSize: "12px", color: "#6b7280" }}>{label}</div>
+      <div style={{ fontSize: "12px", color: "#6b7280" }}>
+        {tooltip ? <Tooltip text={tooltip}>{label}</Tooltip> : label}
+      </div>
       <div style={{ fontSize: "18px", fontWeight: 600 }}>{value}</div>
     </div>
   );

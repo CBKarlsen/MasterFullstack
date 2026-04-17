@@ -23,6 +23,7 @@ import {
 import type { LogEntry } from "../utils/resultLogStore";
 import { LogTable } from "./LogTable";
 import { SigmaErrorChart } from "./SigmaErrorChart";
+import { Tooltip } from "./ui/Tooltip";
 
 export interface CalibrationStats {
   baseline_mean: number;
@@ -443,7 +444,12 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
                 Export CSV
               </button>
               <button
-                onClick={() => { clearLog(); setLogEntries([]); }}
+                onClick={() => {
+                  if (window.confirm(`Clear all ${logEntries.length} log entries? This cannot be undone.`)) {
+                    clearLog();
+                    setLogEntries([]);
+                  }
+                }}
                 disabled={logEntries.length === 0}
                 title="Clear all logged results"
                 style={{
@@ -552,7 +558,9 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
           >
             <div>
               <span style={{ fontWeight: 600, fontSize: "14px" }}>
-                Threshold σ:
+                <Tooltip text="Detection sensitivity. Lower σ = more sensitive (more alerts). Higher σ = stricter (fewer alerts). 3σ is a good starting point.">
+                  Threshold σ:
+                </Tooltip>
               </span>
               <span
                 style={{

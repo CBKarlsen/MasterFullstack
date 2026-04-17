@@ -57,7 +57,7 @@ export function ProbabilityChart({
           gap: '16px',
         }}
       >
-        <div style={{ fontSize: '16px', fontWeight: 500 }}>Calibrating System...</div>
+        <div style={{ fontSize: '16px', fontWeight: 500 }}>Calibrating baseline (~20s) — do not stop the simulation</div>
         <div
           style={{
             width: '200px',

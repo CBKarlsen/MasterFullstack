@@ -7,10 +7,10 @@ interface TrafficLightProps {
 
 export function TrafficLight({ color, message }: TrafficLightProps) {
   const colors: Record<TLType, { bg: string; text: string }> = {
-    green: { bg: '#22c55e', text: 'Healthy' },
-    yellow: { bg: '#eab308', text: 'Warning' },
-    red: { bg: '#ef4444', text: 'Critical' },
-    gray: { bg: '#6b7280', text: 'Unknown' },
+    green: { bg: '#22c55e', text: 'No anomaly detected' },
+    yellow: { bg: '#eab308', text: 'Partial blockage — monitor closely' },
+    red: { bg: '#ef4444', text: 'Critical blockage — act immediately' },
+    gray: { bg: '#6b7280', text: 'Awaiting data' },
   };
 
   const { bg, text } = colors[color] || colors.gray;
