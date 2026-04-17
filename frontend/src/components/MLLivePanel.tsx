@@ -1,8 +1,11 @@
 import { useState } from "react";
 import axios from "axios";
 import type { SimulationData, ModelMetadata } from "../types";
+import { ToggleSwitch } from "./ui/ToggleSwitch";
+import { SectionLabel } from "./ui/SectionLabel";
+import { COLOR } from "../styles/tokens";
 
-interface Props {
+interface MLLivePanelProps {
   currentData: SimulationData | null;
   models: ModelMetadata[];
   isCalibrating: boolean;
@@ -11,87 +14,18 @@ interface Props {
 }
 
 function probStyle(prob: number) {
-  if (prob < 0.2) return { bar: "#22c55e", bg: "#f0fdf4", text: "#15803d", label: "Healthy" };
-  if (prob < 0.7) return { bar: "#f59e0b", bg: "#fffbeb", text: "#d97706", label: "Warning" };
-  return { bar: "#ef4444", bg: "#fef2f2", text: "#dc2626", label: "Critical" };
+  if (prob < 0.2) return { bar: COLOR.SUCCESS_BRIGHT, bg: COLOR.SUCCESS_SUBTLE, text: "#15803d", label: "Healthy" };
+  if (prob < 0.7) return { bar: COLOR.WARNING, bg: COLOR.WARNING_BG, text: COLOR.WARNING_TEXT, label: "Warning" };
+  return { bar: COLOR.DANGER_BRIGHT, bg: COLOR.DANGER_BG, text: COLOR.DANGER, label: "Critical" };
 }
 
-// ---------------------------------------------------------------------------
-// Toggle switch (pill style)
-// ---------------------------------------------------------------------------
-function ToggleSwitch({
-  enabled,
-  loading,
-  onClick,
-}: {
-  enabled: boolean;
-  loading: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={loading}
-      aria-label={enabled ? "Disable model" : "Enable model"}
-      style={{
-        width: "34px",
-        height: "18px",
-        borderRadius: "9px",
-        border: "none",
-        backgroundColor: enabled ? "#16a34a" : "#d1d5db",
-        cursor: loading ? "wait" : "pointer",
-        position: "relative",
-        transition: "background-color 0.2s",
-        flexShrink: 0,
-      }}
-    >
-      <span
-        style={{
-          position: "absolute",
-          top: "2px",
-          left: enabled ? "18px" : "2px",
-          width: "14px",
-          height: "14px",
-          borderRadius: "50%",
-          backgroundColor: "#fff",
-          transition: "left 0.2s",
-          boxShadow: "0 1px 2px rgba(0,0,0,0.15)",
-        }}
-      />
-    </button>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Section header label
-// ---------------------------------------------------------------------------
-function SectionLabel({ children }: { children: string }) {
-  return (
-    <div
-      style={{
-        fontSize: "11px",
-        fontWeight: 600,
-        color: "#9ca3af",
-        textTransform: "uppercase",
-        letterSpacing: "0.06em",
-        marginBottom: "10px",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
 export function MLLivePanel({
   currentData,
   models,
   isCalibrating,
   calibrationProgress,
   onToggle,
-}: Props) {
+}: MLLivePanelProps) {
   const [toggling, setToggling] = useState<string | null>(null);
 
   const handleToggle = async (name: string, currentlyEnabled: boolean) => {

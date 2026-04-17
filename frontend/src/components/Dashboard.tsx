@@ -14,6 +14,8 @@ import type { TrafficLight as TLType } from "../types";
 import { BatchAnalysis } from "./BatchAnalysis";
 import { ModelsTab } from "./ModelsTab";
 import { LiveForecastPanel } from "./LiveForecastPanel";
+import { Button } from "./ui/Button";
+import { COLOR, FONT_SIZE, FONT_WEIGHT, RADIUS, SHADOW, SPACING } from "../styles/tokens";
 
 export function Dashboard() {
   const {
@@ -77,95 +79,66 @@ export function Dashboard() {
   };
 
   return (
-    <div style={{ padding: "24px", maxWidth: "1400px", margin: "0 auto" }}>
+    <div style={{ padding: SPACING.XXL, maxWidth: "1400px", margin: "0 auto" }}>
       {/* Header */}
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          marginBottom: "24px",
+          marginBottom: SPACING.XXL,
         }}
       >
         <div>
-          <h1 style={{ margin: 0, fontSize: "24px" }}>
+          <h1 style={{ margin: 0, fontSize: FONT_SIZE.XXL }}>
             Pipe Clogging Detection Platform
           </h1>
           <div
             style={{
               display: "flex",
-              gap: "4px",
-              background: "#f3f4f6",
-              borderRadius: "8px",
+              gap: SPACING.XS,
+              background: COLOR.GRAY_100,
+              borderRadius: RADIUS.LG,
               padding: "3px",
             }}
           >
-            <button
-              onClick={() => setMode("realtime")}
-              style={{
-                padding: "6px 16px",
-                borderRadius: "6px",
-                border: "none",
-                background: mode === "realtime" ? "#fff" : "transparent",
-                fontWeight: mode === "realtime" ? 600 : 400,
-                cursor: "pointer",
-                fontSize: "13px",
-                boxShadow:
-                  mode === "realtime" ? "0 1px 2px rgba(0,0,0,0.1)" : "none",
-              }}
-            >
-              Real-time
-            </button>
-            <button
-              onClick={() => setMode("batch")}
-              style={{
-                padding: "6px 16px",
-                borderRadius: "6px",
-                border: "none",
-                background: mode === "batch" ? "#fff" : "transparent",
-                fontWeight: mode === "batch" ? 600 : 400,
-                cursor: "pointer",
-                fontSize: "13px",
-                boxShadow:
-                  mode === "batch" ? "0 1px 2px rgba(0,0,0,0.1)" : "none",
-              }}
-            >
-              Batch Analysis
-            </button>
-            <button
-              onClick={() => setMode("models")}
-              style={{
-                padding: "6px 16px",
-                borderRadius: "6px",
-                border: "none",
-                background: mode === "models" ? "#fff" : "transparent",
-                fontWeight: mode === "models" ? 600 : 400,
-                cursor: "pointer",
-                fontSize: "13px",
-                boxShadow:
-                  mode === "models" ? "0 1px 2px rgba(0,0,0,0.1)" : "none",
-              }}
-            >
-              Models
-            </button>
+            {(["realtime", "batch", "models"] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setMode(tab)}
+                style={{
+                  padding: `${SPACING.XS} ${SPACING.LG}`,
+                  borderRadius: RADIUS.MD,
+                  border: "none",
+                  background: mode === tab ? COLOR.WHITE : "transparent",
+                  fontWeight: mode === tab ? FONT_WEIGHT.SEMIBOLD : FONT_WEIGHT.NORMAL,
+                  cursor: "pointer",
+                  fontSize: FONT_SIZE.MD,
+                  boxShadow: mode === tab ? SHADOW.SM : "none",
+                  fontFamily: "inherit",
+                }}
+              >
+                {tab === "realtime" ? "Real-time" : tab === "batch" ? "Batch Analysis" : "Models"}
+              </button>
+            ))}
           </div>
-          <p style={{ margin: "4px 0 0", color: "#6b7280" }}>
+          <p style={{ margin: `${SPACING.XS} 0 0`, color: COLOR.GRAY_500 }}>
             Real-time FFT & ML-based anomaly detection
           </p>
         </div>
-        <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: SPACING.MD, alignItems: "center" }}>
           {/* Speed selector */}
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <label style={{ fontSize: "14px", color: "#6b7280" }}>Speed:</label>
+          <div style={{ display: "flex", alignItems: "center", gap: SPACING.SM }}>
+            <label style={{ fontSize: FONT_SIZE.BASE, color: COLOR.GRAY_500 }}>Speed:</label>
             <select
               value={speed}
               onChange={(e) => setSpeed(Number(e.target.value))}
               disabled={isConnected}
               style={{
-                padding: "6px 10px",
-                borderRadius: "4px",
-                border: "1px solid #e5e7eb",
-                fontSize: "14px",
+                padding: `${SPACING.XS} ${SPACING.SM}`,
+                borderRadius: RADIUS.SM,
+                border: `1px solid ${COLOR.GRAY_200}`,
+                fontSize: FONT_SIZE.BASE,
               }}
             >
               <option value={0.5}>0.5x</option>
@@ -180,42 +153,33 @@ export function Dashboard() {
 
           <span
             style={{
-              padding: "4px 12px",
-              borderRadius: "9999px",
-              fontSize: "14px",
-              backgroundColor: isConnected ? "#dcfce7" : "#fee2e2",
-              color: isConnected ? "#166534" : "#991b1b",
+              padding: `${SPACING.XS} ${SPACING.MD}`,
+              borderRadius: RADIUS.PILL,
+              fontSize: FONT_SIZE.BASE,
+              backgroundColor: isConnected ? COLOR.SUCCESS_BG : "#fee2e2",
+              color: isConnected ? COLOR.SUCCESS_TEXT : COLOR.DANGER_TEXT,
             }}
           >
             {isConnected ? "Running" : "Stopped"}
           </span>
-          <button
+          <Button
             onClick={isConnected ? handleStop : handleStart}
+            variant={isConnected ? "danger" : "primary"}
             disabled={!selectedFile && !isConnected}
-            style={{
-              padding: "8px 16px",
-              borderRadius: "6px",
-              border: "none",
-              backgroundColor: isConnected ? "#ef4444" : "#3b82f6",
-              color: "#fff",
-              fontWeight: 500,
-              cursor: !selectedFile && !isConnected ? "not-allowed" : "pointer",
-              opacity: !selectedFile && !isConnected ? 0.6 : 1,
-            }}
           >
             {isConnected ? "Stop" : "Start Simulation"}
-          </button>
+          </Button>
         </div>
       </div>
 
       {error && (
         <div
           style={{
-            padding: "12px",
-            marginBottom: "16px",
+            padding: SPACING.MD,
+            marginBottom: SPACING.LG,
             backgroundColor: "#fee2e2",
-            color: "#991b1b",
-            borderRadius: "6px",
+            color: COLOR.DANGER_TEXT,
+            borderRadius: RADIUS.MD,
           }}
         >
           {error}
