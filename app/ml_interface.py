@@ -4,16 +4,17 @@ import os
 
 # Try to import typical ML libs (catch errors if they aren't installed)
 try:
-    import joblib # Common for Scikit-Learn models
+    import joblib  # Common for Scikit-Learn models
     import sklearn
 except ImportError:
     joblib = None
+
 
 class MLPredictor:
     def __init__(self, model_path="model/clogging_model.pkl"):
         self.model = None
         self.ready = False
-        
+
         # 1. Try to load a pre-trained model if it exists
         if joblib and os.path.exists(model_path):
             try:
@@ -43,18 +44,18 @@ class MLPredictor:
         else:
             # DUMMY MODE (Placeholder for your thesis)
             # This logic mimics a model so you can test the GUI connection
-            
+
             # Unpack features
             # features = [static, composite, turbulence, slope]
             static = feature_vector[0]
             composite = feature_vector[1]
-            slope = feature_vector[3] # Using the slope
-            
+            slope = feature_vector[3]  # Using the slope
+
             # Simple heuristic mimicking "AI"
             if static > 0.5 and composite > 0.05:
-                return 0.95 # High probability
+                return 0.95  # High probability
             elif slope > -1.5 and slope != 0:
-                return 0.80 # Physics says it's clogged
+                return 0.80  # Physics says it's clogged
             elif static > 0.2:
                 return 0.4
             return 0.01

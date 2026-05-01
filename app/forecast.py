@@ -6,18 +6,19 @@ Fits three growth models (linear, exponential, power-law) to the composite
 score time-series after the first threshold crossing, and projects when the
 score will reach a critical level.
 """
+
 import numpy as np
 from typing import Any
 
 MIN_FORECAST_POINTS = 20
 DEFAULT_CRITICAL_MULTIPLIER = 2.0
 DEFAULT_SMOOTHING_WINDOW_SEC = 60.0
-DECAY_LAMBDA_FACTOR = 3.0          # weight at onset ≈ exp(-3) ≈ 5% of most-recent
+DECAY_LAMBDA_FACTOR = 3.0  # weight at onset ≈ exp(-3) ≈ 5% of most-recent
 CURVE_POINTS_COUNT = 100
 MIN_GROWTH_RATE = 1e-10
 MAX_ETA_SECONDS = 30 * 24 * 3600  # beyond 30 days → treat as no crossing
-FLOW_ZERO_FRACTION = 0.05          # flow ≤ 5 % of baseline → fully blocked
-MIN_FLOW_DECLINE_FRACTION = 0.03   # flow must have dropped ≥ 3 % of baseline to fit
+FLOW_ZERO_FRACTION = 0.05  # flow ≤ 5 % of baseline → fully blocked
+MIN_FLOW_DECLINE_FRACTION = 0.03  # flow must have dropped ≥ 3 % of baseline to fit
 
 
 def _r_squared(actual: np.ndarray, predicted: np.ndarray) -> float:
@@ -67,7 +68,9 @@ def _fit_exponential(
     k, log_s0 = float(coeffs[0]), float(coeffs[1])
     s0 = float(np.exp(log_s0))
     r2 = _r_squared(log_s, k * t_v + log_s0)
-    eta_rel = float(np.log(critical / s0) / k) if k > MIN_GROWTH_RATE and s0 > 0 else None
+    eta_rel = (
+        float(np.log(critical / s0) / k) if k > MIN_GROWTH_RATE and s0 > 0 else None
+    )
     return {"r2": r2, "params": {"k": k, "s0": s0}, "eta_relative": eta_rel}
 
 
@@ -82,7 +85,9 @@ def _fit_power_law(
     n, log_a = float(coeffs[0]), float(coeffs[1])
     a = float(np.exp(log_a))
     r2 = _r_squared(log_s, n * log_t + log_a)
-    eta_rel = float((critical / a) ** (1.0 / n)) if n > MIN_GROWTH_RATE and a > 0 else None
+    eta_rel = (
+        float((critical / a) ** (1.0 / n)) if n > MIN_GROWTH_RATE and a > 0 else None
+    )
     return {"r2": r2, "params": {"a": a, "n": n}, "eta_relative": eta_rel}
 
 
@@ -115,7 +120,10 @@ def _find_onset_time(
 ) -> float | None:
     """Return timestamp of first raw analysis point above threshold, or None."""
     for p in timeseries:
-        if p.get("phase") == "analysis" and p.get("composite_score", 0.0) > fft_threshold:
+        if (
+            p.get("phase") == "analysis"
+            and p.get("composite_score", 0.0) > fft_threshold
+        ):
             return float(p["time"])
     return None
 
@@ -124,7 +132,8 @@ def _build_post_onset_arrays(
     timeseries: list[dict[str, Any]], onset_time: float
 ) -> tuple[np.ndarray, np.ndarray]:
     pts = [
-        p for p in timeseries
+        p
+        for p in timeseries
         if p.get("phase") == "analysis" and p.get("time", 0.0) >= onset_time
     ]
     return (
@@ -156,7 +165,11 @@ def compute_clogging_forecast(
     smoothing_window_sec: rolling median window applied to scores before fitting.
     Returns None if no crossing exists or post-onset data is insufficient.
     """
-    resolved_onset = onset_time if onset_time is not None else _find_onset_time(timeseries, fft_threshold)
+    resolved_onset = (
+        onset_time
+        if onset_time is not None
+        else _find_onset_time(timeseries, fft_threshold)
+    )
     if resolved_onset is None:
         return None
 
@@ -169,13 +182,15 @@ def compute_clogging_forecast(
     weights = _build_decay_weights(t_rel)
 
     fits: dict[str, dict[str, Any]] = {
-        "linear":      _fit_linear(t_rel, scores, critical, weights),
+        "linear": _fit_linear(t_rel, scores, critical, weights),
         "exponential": _fit_exponential(t_rel, scores, critical, weights),
-        "power_law":   _fit_power_law(t_rel, scores, critical, weights),
+        "power_law": _fit_power_law(t_rel, scores, critical, weights),
     }
     _resolve_absolute_etas(fits, resolved_onset)
 
-    valid_etas = [f["eta_seconds"] for f in fits.values() if f["eta_seconds"] is not None]
+    valid_etas = [
+        f["eta_seconds"] for f in fits.values() if f["eta_seconds"] is not None
+    ]
     consensus_eta: float | None = float(np.median(valid_etas)) if valid_etas else None
     best_fit = max(fits.items(), key=lambda kv: kv[1]["r2"])[0]
 
@@ -190,7 +205,9 @@ def compute_clogging_forecast(
         "consensus_eta": consensus_eta,
         "post_onset_points": int(len(scores)),
         "curve_data": {
-            name: _generate_curve_points(name, fit.get("params", {}), float(t_rel[-1]), resolved_onset)
+            name: _generate_curve_points(
+                name, fit.get("params", {}), float(t_rel[-1]), resolved_onset
+            )
             for name, fit in fits.items()
         },
     }
@@ -198,10 +215,14 @@ def compute_clogging_forecast(
 
 # ── Flow-based ETA ────────────────────────────────────────────────────────────
 
+
 def _calibration_flow_mean(timeseries: list[dict[str, Any]]) -> float:
     """Mean flow rate during calibration phase (baseline reference)."""
-    values = [p["flow"] for p in timeseries
-              if p.get("phase") == "calibration" and p.get("flow", 0.0) > 0.0]
+    values = [
+        p["flow"]
+        for p in timeseries
+        if p.get("phase") == "calibration" and p.get("flow", 0.0) > 0.0
+    ]
     return float(np.mean(values)) if values else 0.0
 
 
@@ -209,8 +230,11 @@ def _post_onset_flow(
     timeseries: list[dict[str, Any]], onset_time: float
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return (t_rel, flow) arrays for all analysis points from onset onward."""
-    pts = [p for p in timeseries
-           if p.get("phase") == "analysis" and p.get("time", 0.0) >= onset_time]
+    pts = [
+        p
+        for p in timeseries
+        if p.get("phase") == "analysis" and p.get("time", 0.0) >= onset_time
+    ]
     return (
         np.array([p["time"] for p in pts], dtype=float) - onset_time,
         np.array([p.get("flow", 0.0) for p in pts], dtype=float),
@@ -270,19 +294,21 @@ def compute_flow_eta(
 
     target = max(baseline * FLOW_ZERO_FRACTION, 0.0)
     fits: dict[str, Any] = {
-        "linear":      _fit_linear_decline(t_rel, flow, target),
+        "linear": _fit_linear_decline(t_rel, flow, target),
         "exponential": _fit_exp_decay(t_rel, flow, target),
     }
     _resolve_absolute_etas(fits, onset_time)
 
-    valid_etas = [f["eta_seconds"] for f in fits.values() if f.get("eta_seconds") is not None]
+    valid_etas = [
+        f["eta_seconds"] for f in fits.values() if f.get("eta_seconds") is not None
+    ]
     consensus_eta: float | None = float(np.median(valid_etas)) if valid_etas else None
     best_fit = max(fits.items(), key=lambda kv: kv[1]["r2"])[0]
 
     return {
         "baseline_flow": round(baseline, 4),
-        "target_flow":   round(target, 4),
-        "fits":          fits,
-        "best_fit":      best_fit,
+        "target_flow": round(target, 4),
+        "fits": fits,
+        "best_fit": best_fit,
         "consensus_eta": consensus_eta,
     }

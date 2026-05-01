@@ -37,7 +37,7 @@ SKIP_FILES = {
     "06-12-LF.xlsx",           # multiple runs + no flow data — same as 14-07
     "07-07-LF.xlsx",           # multiple runs + no flow data — same as 14-07
     # 29.06.22 splits — too short for 120 s calibration; use combined 29-06-LF.xlsx instead
-    "29-06-LF-Run1.xlsx",
+    # (Run1 re-included below as no-block ground truth)
     "29-06-LF-Run2.xlsx",
     "2906-2.csv",
     "2906-3.csv",
@@ -80,12 +80,14 @@ GROUND_TRUTH: dict[str, float | None] = {
     # 27.01.23 — blockage of orifice and loop at 7 Hz, event at 54:44
     "27-01-23-LF.xlsx":   54.733,
 
-    # 18.11.22 — loop blockage at 6 Hz
-    "18-11-LF.xlsx":      None,
+    # 18.11.22 — loop blockage at 6 Hz, event at 6:50
+    "18-11-LF.xlsx":      6.833,
 
     # 29.06.22 — 4 runs; blockage in runs 2/3/4 (run 1 = no blockage).
-    # Per-run splits skipped (too short for calibration); only the combined file is evaluated.
-    "29-06-LF.xlsx":      None,
+    # Run 1 evaluated separately as a no-block file (composite stays silent).
+    "29-06-LF-Run1.xlsx": NO_BLOCK,
+    # Combined file: crossing observed at 36:14, corresponds to run 2 blockage.
+    "29-06-LF.xlsx":      36.233,
 
     # 07.09.22 — test section blockage; video 39:34, file clock 29:54
     "0709.csv":           29.9,

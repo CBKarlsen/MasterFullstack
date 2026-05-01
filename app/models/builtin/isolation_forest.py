@@ -36,18 +36,24 @@ def _synthetic_iso():
     n = 2000
 
     # Synthetic healthy pipe data — same distribution as RandomForest's healthy class
-    healthy = np.column_stack([
-        rng.exponential(0.005, n),       # static_score
-        rng.exponential(0.015, n),       # composite_score
-        rng.exponential(0.010, n),       # turbulence_score
-        rng.normal(-2.75, 0.25, n),      # spectral_slope
-    ])
+    healthy = np.column_stack(
+        [
+            rng.exponential(0.005, n),  # static_score
+            rng.exponential(0.015, n),  # composite_score
+            rng.exponential(0.010, n),  # turbulence_score
+            rng.normal(-2.75, 0.25, n),  # spectral_slope
+        ]
+    )
 
-    iso = IsolationForest(n_estimators=100, contamination=0.05, random_state=42, n_jobs=1)
+    iso = IsolationForest(
+        n_estimators=100, contamination=0.05, random_state=42, n_jobs=1
+    )
     with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message=".*sklearn.utils.parallel.*", category=UserWarning)
+        warnings.filterwarnings(
+            "ignore", message=".*sklearn.utils.parallel.*", category=UserWarning
+        )
         iso.fit(healthy)
-        raw = -iso.score_samples(healthy)   # negate: higher ⟹ more anomalous
+        raw = -iso.score_samples(healthy)  # negate: higher ⟹ more anomalous
 
     score_min = float(np.percentile(raw, 1))
     score_max = float(np.percentile(raw, 99))
@@ -76,7 +82,11 @@ class IsolationForestModel(BaseModel):
         self._training_stats: Optional[Dict[str, Any]] = None
 
         # Live training progress — polled by the /training-progress endpoint
-        self._training_state: Dict[str, Any] = {"phase": "idle", "percent": 0, "message": ""}
+        self._training_state: Dict[str, Any] = {
+            "phase": "idle",
+            "percent": 0,
+            "message": "",
+        }
         self._training_result: Optional[Dict[str, Any]] = None
         self._training_error: Optional[str] = None
 
@@ -106,6 +116,7 @@ class IsolationForestModel(BaseModel):
     def warmup(self) -> None:
         try:
             import joblib
+
             if _SAVE_PATH.exists():
                 saved = joblib.load(_SAVE_PATH)
                 self._iso = saved["iso"]
@@ -113,15 +124,21 @@ class IsolationForestModel(BaseModel):
                 self._score_max = saved.get("score_max", 1.0)
                 self._training_source = saved.get("source", "user data")
                 self._training_stats = saved.get("stats")
-                print(f"[IsolationForestModel] Loaded saved model ({self._training_source}).")
+                print(
+                    f"[IsolationForestModel] Loaded saved model ({self._training_source})."
+                )
             else:
                 self._iso, self._score_min, self._score_max = _synthetic_iso()
-                print("[IsolationForestModel] Trained on synthetic healthy data — ready.")
+                print(
+                    "[IsolationForestModel] Trained on synthetic healthy data — ready."
+                )
         except ImportError:
             print("[IsolationForestModel] scikit-learn not installed; model disabled.")
             self._metadata.enabled = False
         except Exception as e:
-            print(f"[IsolationForestModel] Load failed ({e}); falling back to synthetic.")
+            print(
+                f"[IsolationForestModel] Load failed ({e}); falling back to synthetic."
+            )
             self._iso, self._score_min, self._score_max = _synthetic_iso()
 
     # ------------------------------------------------------------------
@@ -156,10 +173,14 @@ class IsolationForestModel(BaseModel):
             n_jobs=1,
         )
         with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", message=".*sklearn.utils.parallel.*", category=UserWarning)
+            warnings.filterwarnings(
+                "ignore", message=".*sklearn.utils.parallel.*", category=UserWarning
+            )
             iso.fit(X_healthy)
-            raw_scores = -iso.score_samples(X_healthy)   # negate: higher ⟹ more anomalous
-            labels = iso.predict(X_healthy)              # -1 = anomaly, +1 = normal
+            raw_scores = -iso.score_samples(
+                X_healthy
+            )  # negate: higher ⟹ more anomalous
+            labels = iso.predict(X_healthy)  # -1 = anomaly, +1 = normal
 
         score_min = float(np.percentile(raw_scores, 1))
         score_max = float(np.percentile(raw_scores, 99))
@@ -180,13 +201,16 @@ class IsolationForestModel(BaseModel):
         self._training_stats = stats
 
         _SAVE_DIR.mkdir(parents=True, exist_ok=True)
-        joblib.dump({
-            "iso": iso,
-            "score_min": score_min,
-            "score_max": score_max,
-            "source": self._training_source,
-            "stats": stats,
-        }, _SAVE_PATH)
+        joblib.dump(
+            {
+                "iso": iso,
+                "score_min": score_min,
+                "score_max": score_max,
+                "source": self._training_source,
+                "stats": stats,
+            },
+            _SAVE_PATH,
+        )
 
         return stats
 
@@ -237,7 +261,9 @@ class IsolationForestModel(BaseModel):
     # Inference
     # ------------------------------------------------------------------
 
-    def predict_batch(self, features_list: List[Dict[str, Any]]) -> List[PredictionResult]:
+    def predict_batch(
+        self, features_list: List[Dict[str, Any]]
+    ) -> List[PredictionResult]:
         """Vectorised batch inference — single score_samples() call for all N rows.
 
         When the model is on synthetic training data, all predictions return
@@ -246,7 +272,9 @@ class IsolationForestModel(BaseModel):
         Users should train the model on their own healthy recordings first.
         """
         dormant = PredictionResult(
-            probability=0.0, confidence=0.0, classification="healthy",
+            probability=0.0,
+            confidence=0.0,
+            classification="healthy",
             extras={"synthetic": True, "dormant": True},
         )
         if self._iso is None or not features_list:
@@ -256,10 +284,14 @@ class IsolationForestModel(BaseModel):
         if self.is_synthetic:
             return [dormant] * len(features_list)
 
-        X = np.array([[f.get(feat, 0.0) for feat in self._FEATURES] for f in features_list])
+        X = np.array(
+            [[f.get(feat, 0.0) for feat in self._FEATURES] for f in features_list]
+        )
 
         with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", message=".*sklearn.utils.parallel.*", category=UserWarning)
+            warnings.filterwarnings(
+                "ignore", message=".*sklearn.utils.parallel.*", category=UserWarning
+            )
             raw_scores = -self._iso.score_samples(X)
 
         probs = self._scores_to_probs(raw_scores)
@@ -274,16 +306,20 @@ class IsolationForestModel(BaseModel):
                 classification = "warning"
             else:
                 classification = "critical"
-            results.append(PredictionResult(
-                probability=p,
-                confidence=confidence,
-                classification=classification,
-            ))
+            results.append(
+                PredictionResult(
+                    probability=p,
+                    confidence=confidence,
+                    classification=classification,
+                )
+            )
         return results
 
     def predict(self, features: Dict[str, Any]) -> PredictionResult:
         dormant = PredictionResult(
-            probability=0.0, confidence=0.0, classification="healthy",
+            probability=0.0,
+            confidence=0.0,
+            classification="healthy",
             extras={"synthetic": True, "dormant": True},
         )
         if self._iso is None:
@@ -296,7 +332,9 @@ class IsolationForestModel(BaseModel):
         X = np.array([[features.get(f, 0.0) for f in self._FEATURES]])
 
         with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", message=".*sklearn.utils.parallel.*", category=UserWarning)
+            warnings.filterwarnings(
+                "ignore", message=".*sklearn.utils.parallel.*", category=UserWarning
+            )
             raw_score = float(-self._iso.score_samples(X)[0])
 
         prob = float(self._scores_to_probs(np.array([raw_score]))[0])
@@ -309,7 +347,9 @@ class IsolationForestModel(BaseModel):
         else:
             classification = "critical"
 
-        return PredictionResult(probability=prob, confidence=confidence, classification=classification)
+        return PredictionResult(
+            probability=prob, confidence=confidence, classification=classification
+        )
 
     def validate_features(self, features: Dict[str, Any]) -> bool:
         return all(f in features for f in self._FEATURES)

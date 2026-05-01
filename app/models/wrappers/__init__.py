@@ -18,4 +18,4 @@ try:
 except ImportError:
     TensorFlowWrapper = None
 
-__all__ = ['SklearnWrapper', 'PyTorchWrapper', 'TensorFlowWrapper']
+__all__ = ["SklearnWrapper", "PyTorchWrapper", "TensorFlowWrapper"]

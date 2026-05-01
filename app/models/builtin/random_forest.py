@@ -27,23 +27,29 @@ def _synthetic_clf():
     rng = np.random.default_rng(42)
     n = 1000
 
-    healthy = np.column_stack([
-        rng.exponential(0.005, n),           # static_score
-        rng.exponential(0.015, n),           # composite_score
-        rng.exponential(0.010, n),           # turbulence_score
-        rng.normal(-2.75, 0.25, n),          # spectral_slope
-    ])
-    clogged = np.column_stack([
-        rng.exponential(0.04, n) + 0.02,
-        rng.exponential(0.06, n) + 0.05,
-        rng.exponential(0.04, n) + 0.02,
-        rng.normal(-1.25, 0.30, n),
-    ])
+    healthy = np.column_stack(
+        [
+            rng.exponential(0.005, n),  # static_score
+            rng.exponential(0.015, n),  # composite_score
+            rng.exponential(0.010, n),  # turbulence_score
+            rng.normal(-2.75, 0.25, n),  # spectral_slope
+        ]
+    )
+    clogged = np.column_stack(
+        [
+            rng.exponential(0.04, n) + 0.02,
+            rng.exponential(0.06, n) + 0.05,
+            rng.exponential(0.04, n) + 0.02,
+            rng.normal(-1.25, 0.30, n),
+        ]
+    )
 
     X = np.vstack([healthy, clogged])
     y = np.array([0] * n + [1] * n)
 
-    clf = RandomForestClassifier(n_estimators=100, max_depth=8, random_state=42, n_jobs=1)
+    clf = RandomForestClassifier(
+        n_estimators=100, max_depth=8, random_state=42, n_jobs=1
+    )
     with warnings.catch_warnings():
         warnings.filterwarnings(
             "ignore",
@@ -62,7 +68,12 @@ class RandomForestModel(BaseModel):
         static_score, composite_score, turbulence_score, spectral_slope
     """
 
-    _FEATURES = ["static_score", "composite_score", "turbulence_score", "spectral_slope"]
+    _FEATURES = [
+        "static_score",
+        "composite_score",
+        "turbulence_score",
+        "spectral_slope",
+    ]
 
     def __init__(self):
         self._clf = None
@@ -71,7 +82,9 @@ class RandomForestModel(BaseModel):
 
         # Live training progress — read by the /training-progress endpoint
         self._training_state: Dict[str, Any] = {
-            "phase": "idle", "percent": 0, "message": ""
+            "phase": "idle",
+            "percent": 0,
+            "message": "",
         }
         self._training_result: Optional[Dict[str, Any]] = None
         self._training_error: Optional[str] = None
@@ -104,12 +117,15 @@ class RandomForestModel(BaseModel):
         """Load previously saved model, or fall back to synthetic training."""
         try:
             import joblib  # sklearn dependency — always available when sklearn is
+
             if _SAVE_PATH.exists():
                 saved = joblib.load(_SAVE_PATH)
                 self._clf = saved["clf"]
                 self._training_source = saved.get("source", "user data")
                 self._training_stats = saved.get("stats")
-                print(f"[RandomForestModel] Loaded saved model ({self._training_source}).")
+                print(
+                    f"[RandomForestModel] Loaded saved model ({self._training_source})."
+                )
             else:
                 self._clf = _synthetic_clf()
                 self._training_source = "synthetic data"
@@ -170,7 +186,9 @@ class RandomForestModel(BaseModel):
             train_acc = float(accuracy_score(y_train, clf.predict(X_train)))
             test_acc = float(accuracy_score(y_test, clf.predict(X_test)))
 
-        importances = {f: float(clf.feature_importances_[i]) for i, f in enumerate(self._FEATURES)}
+        importances = {
+            f: float(clf.feature_importances_[i]) for i, f in enumerate(self._FEATURES)
+        }
 
         stats: Dict[str, Any] = {
             "n_healthy": int(sum(y == 0)),
@@ -187,7 +205,9 @@ class RandomForestModel(BaseModel):
 
         # Persist so the model survives restarts
         _SAVE_DIR.mkdir(parents=True, exist_ok=True)
-        joblib.dump({"clf": clf, "source": self._training_source, "stats": stats}, _SAVE_PATH)
+        joblib.dump(
+            {"clf": clf, "source": self._training_source, "stats": stats}, _SAVE_PATH
+        )
 
         return stats
 
@@ -198,6 +218,7 @@ class RandomForestModel(BaseModel):
         if _SAVE_PATH.exists():
             try:
                 import joblib
+
                 saved = joblib.load(_SAVE_PATH)
                 saved["source"] = source
                 joblib.dump(saved, _SAVE_PATH)
@@ -233,16 +254,22 @@ class RandomForestModel(BaseModel):
     # Inference
     # ------------------------------------------------------------------
 
-    def predict_batch(self, features_list: List[Dict[str, Any]]) -> List[PredictionResult]:
+    def predict_batch(
+        self, features_list: List[Dict[str, Any]]
+    ) -> List[PredictionResult]:
         """
         Vectorized batch inference — call once with N samples instead of N times.
         Sklearn RF handles (N, 4) arrays natively; this is ~100x faster than
         calling predict() in a loop for large datasets.
         """
         if self._clf is None or not features_list:
-            return [PredictionResult(probability=0.0, confidence=0.0)] * len(features_list)
+            return [PredictionResult(probability=0.0, confidence=0.0)] * len(
+                features_list
+            )
 
-        X = np.array([[f.get(feat, 0.0) for feat in self._FEATURES] for f in features_list])
+        X = np.array(
+            [[f.get(feat, 0.0) for feat in self._FEATURES] for f in features_list]
+        )
         importances = self._clf.feature_importances_
 
         with warnings.catch_warnings():
@@ -264,12 +291,14 @@ class RandomForestModel(BaseModel):
             else:
                 classification = "critical"
             extras = {f: float(importances[i]) for i, f in enumerate(self._FEATURES)}
-            results.append(PredictionResult(
-                probability=prob,
-                confidence=confidence,
-                classification=classification,
-                extras={"feature_importances": extras},
-            ))
+            results.append(
+                PredictionResult(
+                    probability=prob,
+                    confidence=confidence,
+                    classification=classification,
+                    extras={"feature_importances": extras},
+                )
+            )
         return results
 
     def predict(self, features: Dict[str, Any]) -> PredictionResult:

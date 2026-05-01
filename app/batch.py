@@ -7,13 +7,12 @@ and returns the complete result set. Used for post-hoc analysis where you
 want to see the full picture and tweak parameters like sigma.
 """
 
-import math
 import numpy as np
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from .backend import CloggingDetector, _sigma_to_pct
 from .dataloader import DataStreamer
 from .forecast import compute_clogging_forecast, compute_flow_eta
-from .models import get_registry, InputType
+from .models import get_registry
 
 
 def _sanitize(value):
@@ -29,7 +28,10 @@ def _sanitize(value):
         return [_sanitize(v) for v in value]
     return value
 
-def _apply_batch_ml(timeseries: List[Dict[str, Any]], features_list: List[Dict[str, float]]) -> None:
+
+def _apply_batch_ml(
+    timeseries: List[Dict[str, Any]], features_list: List[Dict[str, float]]
+) -> None:
     """
     Run ML inference once over all analysis points in one vectorised call per model.
 
@@ -67,12 +69,18 @@ def _apply_batch_ml(timeseries: List[Dict[str, Any]], features_list: List[Dict[s
                 ]
         except Exception as exc:
             model_pred_rows[name] = [
-                {"probability": 0.0, "confidence": 0.0,
-                 "weight": model.metadata.weight, "error": str(exc)}
+                {
+                    "probability": 0.0,
+                    "confidence": 0.0,
+                    "weight": model.metadata.weight,
+                    "error": str(exc),
+                }
             ] * n
 
     # Write ML results back into timeseries analysis points
-    analysis_indices = [i for i, p in enumerate(timeseries) if p.get("phase") == "analysis"]
+    analysis_indices = [
+        i for i, p in enumerate(timeseries) if p.get("phase") == "analysis"
+    ]
 
     for j, ts_idx in enumerate(analysis_indices):
         if j >= n:
@@ -87,7 +95,7 @@ def _apply_batch_ml(timeseries: List[Dict[str, Any]], features_list: List[Dict[s
         for r in models_at_j.values():
             prob = r.get("probability", 0.0)
             conf = r.get("confidence", 1.0)
-            wt   = r.get("weight", 1.0)
+            wt = r.get("weight", 1.0)
             if "error" not in r and prob > 0:
                 probs.append(prob)
                 weights.append(conf * wt)
@@ -96,7 +104,8 @@ def _apply_batch_ml(timeseries: List[Dict[str, Any]], features_list: List[Dict[s
             total = sum(weights)
             ensemble = (
                 sum(p * w for p, w in zip(probs, weights)) / total
-                if total > 0 else float(np.mean(probs))
+                if total > 0
+                else float(np.mean(probs))
             )
         else:
             ensemble = 0.0
@@ -135,12 +144,14 @@ def run_batch_analysis(
             columns = data_point.get("columns", [])
 
         calibration_buffer.append(dP)
-        all_raw_points.append({
-            "time": t,
-            "flow": flow,
-            "pressure_drop": dP,
-           "raw": _sanitize(raw_data),
-        })
+        all_raw_points.append(
+            {
+                "time": t,
+                "flow": flow,
+                "pressure_drop": dP,
+                "raw": _sanitize(raw_data),
+            }
+        )
 
         # Detect fs from first two points
         if detected_fs is None and len(all_raw_points) >= 2:
@@ -149,21 +160,30 @@ def run_batch_analysis(
                 detected_fs = round(1.0 / dt, 2)
                 actual_fs = fs if fs is not None else detected_fs
                 calibration_samples = max(int(calibration_seconds * actual_fs), 50)
-                print(f"Detected fs={actual_fs} Hz → need {calibration_samples} samples for {calibration_seconds}s calibration")
+                print(
+                    f"Detected fs={actual_fs} Hz → need {calibration_samples} samples for {calibration_seconds}s calibration"
+                )
 
         # Stop when we have enough (only after calibration_samples is computed)
-        if calibration_samples is not None and len(calibration_buffer) >= calibration_samples:
+        if (
+            calibration_samples is not None
+            and len(calibration_buffer) >= calibration_samples
+        ):
             break
 
     # Fallback if fs was never detected
     actual_fs = fs if fs is not None else (detected_fs if detected_fs else 20.0)
     if calibration_samples is None:
         calibration_samples = max(int(calibration_seconds * actual_fs), 50)
-    print(f"Batch analysis using fs={actual_fs} Hz, calibration={len(calibration_buffer)} samples ({calibration_seconds}s)")
+    print(
+        f"Batch analysis using fs={actual_fs} Hz, calibration={len(calibration_buffer)} samples ({calibration_seconds}s)"
+    )
 
     # Now create detector with correct fs.
     # enable_models=False skips per-sample ML inference; we batch-predict at the end.
-    detector = CloggingDetector(fs=actual_fs, window_sec=window_sec, sigma=sigma, enable_models=False)
+    detector = CloggingDetector(
+        fs=actual_fs, window_sec=window_sec, sigma=sigma, enable_models=False
+    )
 
     if len(calibration_buffer) < 50:
         return {
@@ -178,23 +198,27 @@ def run_batch_analysis(
 
     # First, add calibration-phase points (no scores yet)
     for pt in all_raw_points:
-        timeseries.append({
-            "time": pt["time"],
-            "flow": pt["flow"],
-            "pressure_drop": pt["pressure_drop"],
-            "static_score": 0.0,
-            "composite_score": 0.0,
-            "turbulence_score": 0.0,
-            "spectral_slope": 0.0,
-            "traffic_light": "gray",
-            "light_msg": "Calibrating",
-            "ensemble_probability": 0.0,
-            "raw": pt["raw"],
-            "phase": "calibration",
-        })
+        timeseries.append(
+            {
+                "time": pt["time"],
+                "flow": pt["flow"],
+                "pressure_drop": pt["pressure_drop"],
+                "static_score": 0.0,
+                "composite_score": 0.0,
+                "turbulence_score": 0.0,
+                "spectral_slope": 0.0,
+                "traffic_light": "gray",
+                "light_msg": "Calibrating",
+                "ensemble_probability": 0.0,
+                "raw": pt["raw"],
+                "phase": "calibration",
+            }
+        )
 
     # Now process the rest — ML is disabled per-sample, features collected for batch inference
-    collected_features: List[Dict[str, float]] = []  # parallel to analysis entries in timeseries
+    collected_features: List[
+        Dict[str, float]
+    ] = []  # parallel to analysis entries in timeseries
 
     for data_point in streamer:
         t = data_point.get("time", 0.0)
@@ -207,34 +231,45 @@ def run_batch_analysis(
         results = detector.process_sample(dP, t)
 
         if results:
-            timeseries.append({
-                "time": t,
-                "flow": flow,
-                "pressure_drop": dP,
-                "static_score": results.get("static", 0.0),
-                "composite_score": results.get("composite", 0.0),
-                "turbulence_score": results.get("turbulence", 0.0),
-                "spectral_slope": results.get("spectral_slope", 0.0),
-                "traffic_light": results.get("light_color", "gray"),
-                "light_msg": results.get("status_msg", ""),
-                "ensemble_probability": 0.0,
-                "models": {},
-                "raw": _sanitize(raw_data),
-                "phase": "analysis",
-            })
-            collected_features.append(results.get("_features", {
-                "static_score": results.get("static", 0.0),
-                "composite_score": results.get("composite", 0.0),
-                "turbulence_score": results.get("turbulence", 0.0),
-                "spectral_slope": results.get("spectral_slope", 0.0),
-            }))
+            timeseries.append(
+                {
+                    "time": t,
+                    "flow": flow,
+                    "pressure_drop": dP,
+                    "static_score": results.get("static", 0.0),
+                    "composite_score": results.get("composite", 0.0),
+                    "turbulence_score": results.get("turbulence", 0.0),
+                    "spectral_slope": results.get("spectral_slope", 0.0),
+                    "traffic_light": results.get("light_color", "gray"),
+                    "light_msg": results.get("status_msg", ""),
+                    "ensemble_probability": 0.0,
+                    "models": {},
+                    "raw": _sanitize(raw_data),
+                    "phase": "analysis",
+                }
+            )
+            collected_features.append(
+                results.get(
+                    "_features",
+                    {
+                        "static_score": results.get("static", 0.0),
+                        "composite_score": results.get("composite", 0.0),
+                        "turbulence_score": results.get("turbulence", 0.0),
+                        "spectral_slope": results.get("spectral_slope", 0.0),
+                    },
+                )
+            )
 
     analysis_points = [p for p in timeseries if p["phase"] == "analysis"]
-    print(f"Batch complete: {len(timeseries)} total, {len(analysis_points)} analysis points")
+    print(
+        f"Batch complete: {len(timeseries)} total, {len(analysis_points)} analysis points"
+    )
 
     # --- Batch ML inference (single vectorized call per model, much faster) ---
     _apply_batch_ml(timeseries, collected_features)
-    print(f"  Composite range: {min(p['composite_score'] for p in analysis_points) if analysis_points else 'N/A'} - {max(p['composite_score'] for p in analysis_points) if analysis_points else 'N/A'}")
+    print(
+        f"  Composite range: {min(p['composite_score'] for p in analysis_points) if analysis_points else 'N/A'} - {max(p['composite_score'] for p in analysis_points) if analysis_points else 'N/A'}"
+    )
     # Build response
     duration = timeseries[-1]["time"] if timeseries else 0.0
 
@@ -267,7 +302,9 @@ def run_batch_analysis(
             "baseline_std": detector.baseline_std,
             "composite_mean": detector.baseline_composite_mean,
             "composite_std": detector.baseline_composite_std,
-            "composite_p99": float(np.percentile(detector.baseline_composites, 99)) if len(detector.baseline_composites) > 0 else None,
+            "composite_p99": float(np.percentile(detector.baseline_composites, 99))
+            if len(detector.baseline_composites) > 0
+            else None,
             "samples_used": calibration_samples,
         },
         "thresholds": {

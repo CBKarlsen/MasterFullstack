@@ -9,20 +9,19 @@ Supports:
 - File watching for hot-reload of new models
 """
 
-import os
-import json
 import threading
 import time
-from typing import Dict, List, Optional, Any, Type
+from typing import Dict, List, Optional, Any
 from pathlib import Path
 from dataclasses import dataclass
 
-from .base import BaseModel, ModelMetadata, ModelType, InputType, PredictionResult
+from .base import BaseModel
 
 
 @dataclass
 class RegisteredModel:
     """Container for a registered model and its state."""
+
     model: BaseModel
     file_path: Optional[str] = None
     load_time: float = 0.0
@@ -70,10 +69,10 @@ class ModelRegistry:
 
         # Supported file extensions and their loaders
         extensions = {
-            '.pkl': self._load_sklearn_model,
-            '.pt': self._load_pytorch_model,
-            '.pth': self._load_pytorch_model,
-            '.h5': self._load_tensorflow_model,
+            ".pkl": self._load_sklearn_model,
+            ".pt": self._load_pytorch_model,
+            ".pth": self._load_pytorch_model,
+            ".h5": self._load_tensorflow_model,
         }
 
         for file_path in self._models_dir.iterdir():
@@ -86,7 +85,9 @@ class ModelRegistry:
                         if model:
                             self.register(model, str(file_path))
                             loaded.append(model.metadata.name)
-                            print(f"[Registry] Loaded: {model.metadata.name} ({suffix})")
+                            print(
+                                f"[Registry] Loaded: {model.metadata.name} ({suffix})"
+                            )
                     except Exception as e:
                         print(f"[Registry] Failed to load {file_path.name}: {e}")
 
@@ -187,12 +188,13 @@ class ModelRegistry:
             result = []
             for name, reg in self._models.items():
                 meta = reg.model.metadata.to_dict()
-                meta['prediction_count'] = reg.prediction_count
-                meta['avg_inference_ms'] = (
+                meta["prediction_count"] = reg.prediction_count
+                meta["avg_inference_ms"] = (
                     (reg.total_inference_time / reg.prediction_count * 1000)
-                    if reg.prediction_count > 0 else 0
+                    if reg.prediction_count > 0
+                    else 0
                 )
-                meta['last_error'] = reg.last_error
+                meta["last_error"] = reg.last_error
                 result.append(meta)
             return result
 
@@ -243,12 +245,14 @@ class ModelRegistry:
     def _load_sklearn_model(self, path: str) -> Optional[BaseModel]:
         """Load a scikit-learn model from .pkl file."""
         from .wrappers.sklearn_wrapper import SklearnWrapper
+
         return SklearnWrapper.load(path)
 
     def _load_pytorch_model(self, path: str) -> Optional[BaseModel]:
         """Load a PyTorch model from .pt/.pth file."""
         try:
             from .wrappers.pytorch_wrapper import PyTorchWrapper
+
             return PyTorchWrapper.load(path)
         except ImportError:
             print("[Registry] PyTorch not installed, skipping .pt/.pth files")
@@ -258,6 +262,7 @@ class ModelRegistry:
         """Load a TensorFlow/Keras model from .h5 file."""
         try:
             from .wrappers.tensorflow_wrapper import TensorFlowWrapper
+
             return TensorFlowWrapper.load(path)
         except ImportError:
             print("[Registry] TensorFlow not installed, skipping .h5 files")
@@ -277,9 +282,7 @@ class ModelRegistry:
 
         self._watching = True
         self._watcher_thread = threading.Thread(
-            target=self._watch_loop,
-            args=(poll_interval,),
-            daemon=True
+            target=self._watch_loop, args=(poll_interval,), daemon=True
         )
         self._watcher_thread.start()
         print(f"[Registry] Started watching {self._models_dir}")
@@ -304,7 +307,9 @@ class ModelRegistry:
             time.sleep(interval)
 
             try:
-                current_files = {f.name for f in self._models_dir.iterdir() if f.is_file()}
+                current_files = {
+                    f.name for f in self._models_dir.iterdir() if f.is_file()
+                }
 
                 # Detect new files
                 new_files = current_files - known_files
@@ -312,7 +317,7 @@ class ModelRegistry:
                     file_path = self._models_dir / filename
                     suffix = file_path.suffix.lower()
 
-                    if suffix in ('.pkl', '.pt', '.pth', '.h5'):
+                    if suffix in (".pkl", ".pt", ".pth", ".h5"):
                         print(f"[Registry] Detected new model: {filename}")
                         self.discover_models()  # Re-scan to load new model
                         break

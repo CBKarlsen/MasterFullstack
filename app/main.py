@@ -8,11 +8,17 @@ Provides:
 - Health check endpoints
 """
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form
+from fastapi import (
+    FastAPI,
+    WebSocket,
+    WebSocketDisconnect,
+    HTTPException,
+    UploadFile,
+    File,
+    Form,
+)
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from typing import Optional
-import os
 import shutil
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
@@ -20,7 +26,7 @@ from concurrent.futures import ThreadPoolExecutor
 _training_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="rf_train")
 
 from .engine import SimulationEngine
-from .models import ModelRegistry, get_registry
+from .models import get_registry
 from .models.builtin import FFTPhysicsModel, RandomForestModel, IsolationForestModel
 from .dataloader import DataStreamer
 from .batch import run_batch_analysis, recompute_thresholds
@@ -29,7 +35,7 @@ from .batch import run_batch_analysis, recompute_thresholds
 app = FastAPI(
     title="Pipe Clogging Detection Platform",
     description="Modular platform for pipe clogging prediction using FFT and ML models",
-    version="2.0.0"
+    version="2.0.0",
 )
 
 # CORS configuration - allow React frontend to connect
@@ -76,13 +82,14 @@ async def shutdown_event():
 # Health Check Endpoints
 # =============================================================================
 
+
 @app.get("/")
 def read_root():
     """Health check endpoint."""
     return {
         "status": "online",
         "message": "Pipe Clogging Detection Platform API",
-        "version": "2.0.0"
+        "version": "2.0.0",
     }
 
 
@@ -100,6 +107,7 @@ def health_check():
 # =============================================================================
 # Model Management REST API
 # =============================================================================
+
 
 @app.get("/api/models")
 def list_models():
@@ -133,7 +141,7 @@ def get_model(model_name: str):
     # Find the registered model entry for stats
     models_list = registry.list_models()
     for m in models_list:
-        if m['name'] == model_name:
+        if m["name"] == model_name:
             return m
 
     return model.metadata.to_dict()
@@ -164,7 +172,7 @@ def enable_model(model_name: str, enabled: bool = True):
     return {
         "model": model_name,
         "enabled": enabled,
-        "message": f"Model {'enabled' if enabled else 'disabled'}"
+        "message": f"Model {'enabled' if enabled else 'disabled'}",
     }
 
 
@@ -222,10 +230,7 @@ def delete_model(model_name: str):
     if not success:
         raise HTTPException(status_code=500, detail="Failed to remove model")
 
-    return {
-        "model": model_name,
-        "message": "Model unregistered (file not deleted)"
-    }
+    return {"model": model_name, "message": "Model unregistered (file not deleted)"}
 
 
 @app.post("/api/models/upload")
@@ -251,13 +256,12 @@ async def upload_model(
         Upload confirmation with model name.
     """
     # Validate file extension
-    allowed_extensions = {'.pkl', '.pt', '.pth', '.h5'}
+    allowed_extensions = {".pkl", ".pt", ".pth", ".h5"}
     suffix = Path(file.filename).suffix.lower()
 
     if suffix not in allowed_extensions:
         raise HTTPException(
-            status_code=400,
-            detail=f"Invalid file type. Allowed: {allowed_extensions}"
+            status_code=400, detail=f"Invalid file type. Allowed: {allowed_extensions}"
         )
 
     # Ensure models directory exists
@@ -274,22 +278,28 @@ async def upload_model(
     # Create metadata JSON if custom metadata provided
     if name or author or description:
         import json
+
         metadata = {
             "name": name or Path(file.filename).stem,
             "author": author or "Unknown",
             "description": description or "",
             "model_type": {
-                '.pkl': 'sklearn',
-                '.pt': 'pytorch',
-                '.pth': 'pytorch',
-                '.h5': 'tensorflow'
-            }.get(suffix, 'sklearn'),
+                ".pkl": "sklearn",
+                ".pt": "pytorch",
+                ".pth": "pytorch",
+                ".h5": "tensorflow",
+            }.get(suffix, "sklearn"),
             "input_type": "single",
-            "input_features": ["static_score", "composite_score", "turbulence_score", "spectral_slope"],
+            "input_features": [
+                "static_score",
+                "composite_score",
+                "turbulence_score",
+                "spectral_slope",
+            ],
         }
 
-        json_path = file_path.with_suffix('.json')
-        with open(json_path, 'w') as f:
+        json_path = file_path.with_suffix(".json")
+        with open(json_path, "w") as f:
             json.dump(metadata, f, indent=2)
 
     # Reload models to pick up the new one
@@ -300,7 +310,7 @@ async def upload_model(
         "message": "Model uploaded successfully",
         "filename": file.filename,
         "model_name": name or Path(file.filename).stem,
-        "models_loaded": loaded
+        "models_loaded": loaded,
     }
 
 
@@ -308,10 +318,12 @@ async def upload_model(
 # Random Forest Training Endpoints
 # =============================================================================
 
+
 @app.get("/api/models/random_forest/training-info")
 def get_rf_training_info():
     """Return the current training status of the built-in Random Forest."""
     from .models.builtin.random_forest import RandomForestModel
+
     registry = get_registry()
     model = registry.get("Random Forest")
     if not model or not isinstance(model, RandomForestModel):
@@ -367,12 +379,14 @@ def _do_rf_training(
                 label = 1
             else:
                 continue
-            features_list.append([
-                pt.get("static_score", 0.0),
-                pt.get("composite_score", 0.0),
-                pt.get("turbulence_score", 0.0),
-                pt.get("spectral_slope", 0.0),
-            ])
+            features_list.append(
+                [
+                    pt.get("static_score", 0.0),
+                    pt.get("composite_score", 0.0),
+                    pt.get("turbulence_score", 0.0),
+                    pt.get("spectral_slope", 0.0),
+                ]
+            )
             labels.append(label)
 
         if len(features_list) < 20:
@@ -439,7 +453,9 @@ def train_random_forest(
     registry = get_registry()
     model = registry.get("Random Forest")
     if not model or not isinstance(model, RandomForestModel):
-        raise HTTPException(status_code=404, detail="Random Forest model not found in registry")
+        raise HTTPException(
+            status_code=404, detail="Random Forest model not found in registry"
+        )
 
     # Guard against concurrent training
     current_phase = model._training_state.get("phase", "idle")
@@ -457,8 +473,14 @@ def train_random_forest(
 
     _training_executor.submit(
         _do_rf_training,
-        model, data_path, file, sigma, calibration_seconds,
-        include_warnings, n_estimators, max_depth,
+        model,
+        data_path,
+        file,
+        sigma,
+        calibration_seconds,
+        include_warnings,
+        n_estimators,
+        max_depth,
     )
 
     return {"status": "started"}
@@ -478,6 +500,7 @@ def get_rf_training_progress():
 def reset_random_forest():
     """Discard the user-trained Random Forest and revert to synthetic training."""
     from .models.builtin.random_forest import RandomForestModel
+
     registry = get_registry()
     model = registry.get("Random Forest")
     if not model or not isinstance(model, RandomForestModel):
@@ -489,6 +512,7 @@ def reset_random_forest():
 # =============================================================================
 # Isolation Forest Training Endpoints
 # =============================================================================
+
 
 @app.get("/api/models/isolation_forest/training-info")
 def get_if_training_info():
@@ -541,12 +565,14 @@ def _do_if_training(
             # Unsupervised: only use GREEN (physics-confirmed healthy) points
             if pt.get("traffic_light") != "green":
                 continue
-            features_list.append([
-                pt.get("static_score", 0.0),
-                pt.get("composite_score", 0.0),
-                pt.get("turbulence_score", 0.0),
-                pt.get("spectral_slope", 0.0),
-            ])
+            features_list.append(
+                [
+                    pt.get("static_score", 0.0),
+                    pt.get("composite_score", 0.0),
+                    pt.get("turbulence_score", 0.0),
+                    pt.get("spectral_slope", 0.0),
+                ]
+            )
 
         if len(features_list) < 20:
             msg = (
@@ -561,7 +587,9 @@ def _do_if_training(
 
         _set("training", 80, f"Training Isolation Forest ({n_estimators} trees)…")
         model.set_training_source(f"user data: {filename}")
-        stats = model.train(X_healthy, n_estimators=n_estimators, contamination=contamination)
+        stats = model.train(
+            X_healthy, n_estimators=n_estimators, contamination=contamination
+        )
 
         _set("complete", 100, "Training complete")
         model._training_result = {
@@ -612,7 +640,13 @@ def train_isolation_forest(
 
     _training_executor.submit(
         _do_if_training,
-        model, data_path, file, sigma, calibration_seconds, n_estimators, contamination,
+        model,
+        data_path,
+        file,
+        sigma,
+        calibration_seconds,
+        n_estimators,
+        contamination,
     )
 
     return {"status": "started"}
@@ -654,12 +688,12 @@ def get_model_stats(model_name: str):
 
     models_list = registry.list_models()
     for m in models_list:
-        if m['name'] == model_name:
+        if m["name"] == model_name:
             return {
                 "name": model_name,
-                "prediction_count": m.get('prediction_count', 0),
-                "avg_inference_ms": m.get('avg_inference_ms', 0),
-                "last_error": m.get('last_error'),
+                "prediction_count": m.get("prediction_count", 0),
+                "avg_inference_ms": m.get("avg_inference_ms", 0),
+                "last_error": m.get("last_error"),
             }
 
     raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found")
@@ -668,6 +702,7 @@ def get_model_stats(model_name: str):
 # =============================================================================
 # Data File Management REST API
 # =============================================================================
+
 
 @app.get("/api/data")
 def list_data_files():
@@ -682,38 +717,43 @@ def list_data_files():
     items = []
     for item_path in DATA_DIR.iterdir():
         # Handle individual files
-        if item_path.is_file() and item_path.suffix.lower() in ('.csv', '.xlsx'):
+        if item_path.is_file() and item_path.suffix.lower() in (".csv", ".xlsx"):
             stat = item_path.stat()
-            items.append({
-                "name": item_path.name,
-                "size_bytes": stat.st_size,
-                "size_human": _format_size(stat.st_size),
-                "modified": stat.st_mtime,
-                "is_folder": False,
-                "file_count": 1,
-            })
+            items.append(
+                {
+                    "name": item_path.name,
+                    "size_bytes": stat.st_size,
+                    "size_human": _format_size(stat.st_size),
+                    "modified": stat.st_mtime,
+                    "is_folder": False,
+                    "file_count": 1,
+                }
+            )
         # Handle folders containing data files
         elif item_path.is_dir():
             # Count data files in the folder
             data_files = [
-                f for f in item_path.iterdir()
-                if f.is_file() and f.suffix.lower() in ('.csv', '.xlsx')
+                f
+                for f in item_path.iterdir()
+                if f.is_file() and f.suffix.lower() in (".csv", ".xlsx")
             ]
             if data_files:  # Only include folders that have data files
                 # Calculate total size and get latest modified time
                 total_size = sum(f.stat().st_size for f in data_files)
                 latest_modified = max(f.stat().st_mtime for f in data_files)
-                items.append({
-                    "name": item_path.name,
-                    "size_bytes": total_size,
-                    "size_human": _format_size(total_size),
-                    "modified": latest_modified,
-                    "is_folder": True,
-                    "file_count": len(data_files),
-                })
+                items.append(
+                    {
+                        "name": item_path.name,
+                        "size_bytes": total_size,
+                        "size_human": _format_size(total_size),
+                        "modified": latest_modified,
+                        "is_folder": True,
+                        "file_count": len(data_files),
+                    }
+                )
 
     # Sort by modified date (newest first)
-    items.sort(key=lambda x: x['modified'], reverse=True)
+    items.sort(key=lambda x: x["modified"], reverse=True)
     return items
 
 
@@ -754,7 +794,6 @@ async def recalculate_thresholds(
     )
 
 
-
 @app.post("/api/data/upload")
 async def upload_data_file(file: UploadFile = File(...)):
     """
@@ -767,13 +806,12 @@ async def upload_data_file(file: UploadFile = File(...)):
         Upload confirmation.
     """
     # Validate file extension
-    allowed_extensions = {'.csv', '.xlsx'}
+    allowed_extensions = {".csv", ".xlsx"}
     suffix = Path(file.filename).suffix.lower()
 
     if suffix not in allowed_extensions:
         raise HTTPException(
-            status_code=400,
-            detail=f"Invalid file type. Allowed: {allowed_extensions}"
+            status_code=400, detail=f"Invalid file type. Allowed: {allowed_extensions}"
         )
 
     # Ensure data directory exists
@@ -851,7 +889,7 @@ def get_file_columns(filename: str):
 
 def _format_size(size_bytes: int) -> str:
     """Format bytes to human readable string."""
-    for unit in ['B', 'KB', 'MB', 'GB']:
+    for unit in ["B", "KB", "MB", "GB"]:
         if size_bytes < 1024:
             return f"{size_bytes:.1f} {unit}"
         size_bytes /= 1024
@@ -861,6 +899,7 @@ def _format_size(size_bytes: int) -> str:
 # =============================================================================
 # WebSocket Simulation Endpoint
 # =============================================================================
+
 
 @app.websocket("/ws/simulate")
 async def websocket_endpoint(websocket: WebSocket):
@@ -899,14 +938,14 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.send_json({"error": f"File '{filename}' not found"})
             return
 
-        # Get speed multiplier (default 1.0 = real-time at 20Hz)
+        # Get speed multiplier (1.0 = real-time at the file's native sampling rate)
         speed = config.get("speed", 1.0)
-        speed_delay = 0.05 / max(0.1, min(speed, 100))  # Clamp between 0.1x and 100x
 
         print(f"Client connected. File: {filename}, Speed: {speed}x")
 
-        # Create simulation engine
-        engine = SimulationEngine(str(data_file), speed_delay=speed_delay)
+        # Create simulation engine. Inter-sample delay is set against the
+        # detected sampling rate during calibration, not hardcoded here.
+        engine = SimulationEngine(str(data_file), speed_multiplier=speed)
 
         # Run simulation loop
         await engine.run_simulation(websocket)
@@ -929,6 +968,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(
         app,
         host="0.0.0.0",

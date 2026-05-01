@@ -1,38 +1,38 @@
-import type { TrafficLight as TLType } from '../types';
+import type { TrafficLight as TLType } from "../types";
 
 interface TrafficLightProps {
-  color: TLType;
-  message?: string;
+	color: TLType;
+	message?: string;
 }
 
 export function TrafficLight({ color, message }: TrafficLightProps) {
-  const colors: Record<TLType, { bg: string; text: string }> = {
-    green: { bg: '#22c55e', text: 'No anomaly detected' },
-    yellow: { bg: '#eab308', text: 'Partial blockage — monitor closely' },
-    red: { bg: '#ef4444', text: 'Critical blockage — act immediately' },
-    gray: { bg: '#6b7280', text: 'Awaiting data' },
-  };
+	const colors: Record<TLType, { bg: string; text: string }> = {
+		green: { bg: "#22c55e", text: "No anomaly detected" },
+		yellow: { bg: "#eab308", text: "Partial blockage — monitor closely" },
+		red: { bg: "#ef4444", text: "Critical blockage — act immediately" },
+		gray: { bg: "#6b7280", text: "Awaiting data" },
+	};
 
-  const { bg, text } = colors[color] || colors.gray;
+	const { bg, text } = colors[color] || colors.gray;
 
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-      <div
-        style={{
-          width: '48px',
-          height: '48px',
-          borderRadius: '50%',
-          backgroundColor: bg,
-          boxShadow: `0 0 20px ${bg}`,
-          transition: 'all 0.3s ease',
-        }}
-      />
-      <div>
-        <div style={{ fontWeight: 'bold', fontSize: '18px' }}>{text}</div>
-        {message && (
-          <div style={{ fontSize: '14px', color: '#666' }}>{message}</div>
-        )}
-      </div>
-    </div>
-  );
+	return (
+		<div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+			<div
+				style={{
+					width: "48px",
+					height: "48px",
+					borderRadius: "50%",
+					backgroundColor: bg,
+					boxShadow: `0 0 20px ${bg}`,
+					transition: "all 0.3s ease",
+				}}
+			/>
+			<div>
+				<div style={{ fontWeight: "bold", fontSize: "18px" }}>{text}</div>
+				{message && (
+					<div style={{ fontSize: "14px", color: "#666" }}>{message}</div>
+				)}
+			</div>
+		</div>
+	);
 }

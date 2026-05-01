@@ -14,6 +14,7 @@ import numpy as np
 try:
     import tensorflow as tf
     from tensorflow import keras
+
     TF_AVAILABLE = True
 except ImportError:
     TF_AVAILABLE = False
@@ -66,7 +67,9 @@ class TensorFlowWrapper(BaseModel):
             PredictionResult with probability
         """
         if not TF_AVAILABLE:
-            return PredictionResult(probability=0.0, extras={"error": "TensorFlow not installed"})
+            return PredictionResult(
+                probability=0.0, extras={"error": "TensorFlow not installed"}
+            )
 
         try:
             if self._metadata.input_type == InputType.SEQUENCE:
@@ -104,9 +107,7 @@ class TensorFlowWrapper(BaseModel):
 
         except Exception as e:
             return PredictionResult(
-                probability=0.0,
-                confidence=0.0,
-                extras={"error": str(e)}
+                probability=0.0, confidence=0.0, extras={"error": str(e)}
             )
 
     def validate_features(self, features: Dict[str, Any]) -> bool:
@@ -130,14 +131,18 @@ class TensorFlowWrapper(BaseModel):
 
         try:
             if self._metadata.input_type == InputType.SEQUENCE:
-                dummy = np.zeros((
-                    1, self._metadata.sequence_length,
-                    len(self._metadata.input_features)
-                ), dtype=np.float32)
+                dummy = np.zeros(
+                    (
+                        1,
+                        self._metadata.sequence_length,
+                        len(self._metadata.input_features),
+                    ),
+                    dtype=np.float32,
+                )
             else:
-                dummy = np.zeros((
-                    1, len(self._metadata.input_features)
-                ), dtype=np.float32)
+                dummy = np.zeros(
+                    (1, len(self._metadata.input_features)), dtype=np.float32
+                )
 
             _ = self._model.predict(dummy, verbose=0)
         except Exception as e:
@@ -161,7 +166,7 @@ class TensorFlowWrapper(BaseModel):
             return "critical"
 
     @classmethod
-    def load(cls, path: str) -> Optional['TensorFlowWrapper']:
+    def load(cls, path: str) -> Optional["TensorFlowWrapper"]:
         """
         Load TensorFlow/Keras model from .h5 file or SavedModel directory.
 
@@ -181,9 +186,9 @@ class TensorFlowWrapper(BaseModel):
 
         try:
             # Suppress TF logging during load
-            tf.get_logger().setLevel('ERROR')
+            tf.get_logger().setLevel("ERROR")
 
-            if path.endswith('.h5'):
+            if path.endswith(".h5"):
                 model = keras.models.load_model(path)
             else:
                 # Assume SavedModel directory
@@ -203,14 +208,14 @@ class TensorFlowWrapper(BaseModel):
         """Load metadata from companion JSON file or generate defaults."""
         # For .h5 files, look for .json with same name
         # For directories, look for metadata.json inside
-        if model_path.endswith('.h5'):
-            json_path = Path(model_path).with_suffix('.json')
+        if model_path.endswith(".h5"):
+            json_path = Path(model_path).with_suffix(".json")
         else:
-            json_path = Path(model_path) / 'metadata.json'
+            json_path = Path(model_path) / "metadata.json"
 
         if json_path.exists():
             try:
-                with open(json_path, 'r') as f:
+                with open(json_path, "r") as f:
                     data = json.load(f)
                 return ModelMetadata.from_dict(data)
             except Exception as e:

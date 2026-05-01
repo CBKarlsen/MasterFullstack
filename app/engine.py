@@ -10,23 +10,31 @@ import numpy as np
 from .backend import CloggingDetector
 from .dataloader import DataStreamer
 
-CALIBRATION_SAMPLE_COUNT = 400  # Samples needed before calibration runs
-FRAME_SKIP_RATE = 10            # Send every Nth frame (20Hz → ~2Hz effective rate)
-DEFAULT_SAMPLING_HZ = 20.0      # Fallback when fs cannot be detected from timestamps
-MIN_VALID_DELTA_SEC = 0.0       # Exclude zero-length deltas (duplicate rows)
-MAX_VALID_DELTA_SEC = 60.0      # Exclude huge gaps (file breaks, missing data)
+TARGET_WIRE_HZ = 2.0  # Approximate WebSocket frame rate to the client
+DEFAULT_SAMPLING_HZ = 20.0  # Fallback when fs cannot be detected from timestamps
+CALIBRATION_FS_LOCK_AFTER = 10  # Detect fs after this many samples to size calibration
+MIN_VALID_DELTA_SEC = 0.0  # Exclude zero-length deltas (duplicate rows)
+MAX_VALID_DELTA_SEC = 60.0  # Exclude huge gaps (file breaks, missing data)
 
 
 class SimulationEngine:
     """Orchestrates the simulation loop for real-time clogging detection."""
 
-    def __init__(self, filepath: str, speed_delay: float = 0.1, sigma: float = 3.0):
+    def __init__(
+        self, filepath: str, speed_multiplier: float = 1.0, sigma: float = 3.0
+    ):
         self.filepath = filepath
-        self.delay = speed_delay
+        self.speed_multiplier = max(0.1, min(speed_multiplier, 100.0))
+        # Provisional delay until calibration determines the true fs. Assumes 20 Hz.
+        self.delay = (1.0 / DEFAULT_SAMPLING_HZ) / self.speed_multiplier
+        self.frame_skip_rate = max(1, int(DEFAULT_SAMPLING_HZ / TARGET_WIRE_HZ))
         self.running = False
         self._sigma = sigma
         self.detector = CloggingDetector(sigma=sigma)
         self._frame_count = 0
+        self._required_calibration_samples = (
+            CloggingDetector.required_calibration_samples(DEFAULT_SAMPLING_HZ)
+        )
 
         try:
             self.streamer = DataStreamer(filepath).stream()
@@ -50,6 +58,7 @@ class SimulationEngine:
         calibration_times: list = []
         is_calibrating = True
         columns_sent = False
+        delay_locked = False
 
         await websocket.send_json({"type": "status", "message": "Calibrating..."})
 
@@ -57,21 +66,48 @@ class SimulationEngine:
             while self.running:
                 data_point, is_done = self._next_data_point()
                 if is_done:
-                    await websocket.send_json({"type": "status", "message": "Simulation Complete"})
+                    await websocket.send_json(
+                        {"type": "status", "message": "Simulation Complete"}
+                    )
                     break
                 if data_point is None:
                     await asyncio.sleep(0)
                     continue
 
-                t, flow, dP, raw_data, available_columns = self._extract_fields(data_point)
+                t, flow, dP, raw_data, available_columns = self._extract_fields(
+                    data_point
+                )
 
                 if not columns_sent and available_columns:
-                    await websocket.send_json({"type": "columns", "columns": available_columns})
+                    await websocket.send_json(
+                        {"type": "columns", "columns": available_columns}
+                    )
                     columns_sent = True
 
                 if is_calibrating:
                     calibration_buffer.append(dP)
                     calibration_times.append(t)
+                    # Lock in real-time pacing as soon as we have enough timestamps
+                    # to estimate fs — well before calibration completes.
+                    if (
+                        not delay_locked
+                        and len(calibration_times) >= CALIBRATION_FS_LOCK_AFTER
+                    ):
+                        detected_fs = self._detect_sampling_rate(calibration_times)
+                        self.delay = (1.0 / detected_fs) / self.speed_multiplier
+                        # Scale frame-skip so wire rate ≈ TARGET_WIRE_HZ regardless of fs.
+                        self.frame_skip_rate = max(1, int(detected_fs / TARGET_WIRE_HZ))
+                        # Size calibration buffer to fit ≥21 spectral windows at this fs.
+                        self._required_calibration_samples = (
+                            CloggingDetector.required_calibration_samples(detected_fs)
+                        )
+                        delay_locked = True
+                        print(
+                            f"Inter-sample delay locked: fs={detected_fs} Hz, "
+                            f"delay={self.delay:.4f}s ({self.speed_multiplier}x), "
+                            f"frame_skip={self.frame_skip_rate}, "
+                            f"calibration_samples={self._required_calibration_samples}"
+                        )
                     is_calibrating = await self._maybe_finish_calibration(
                         websocket, calibration_buffer, calibration_times
                     )
@@ -101,7 +137,9 @@ class SimulationEngine:
             print(f"Skipping bad data point: {e}")
             return None, False
 
-    def _extract_fields(self, data_point: Dict) -> Tuple[float, float, float, Dict, list]:
+    def _extract_fields(
+        self, data_point: Dict
+    ) -> Tuple[float, float, float, Dict, list]:
         t = data_point.get("time", 0.0)
         flow = data_point.get("flow", 0.0)
         p_in = data_point.get("p_in", 0.0)
@@ -114,24 +152,31 @@ class SimulationEngine:
         self, websocket, buffer: list, times: list
     ) -> bool:
         """Run calibration when enough samples are collected. Returns is_still_calibrating."""
-        if len(buffer) < CALIBRATION_SAMPLE_COUNT:
+        if len(buffer) < self._required_calibration_samples:
             return True
         try:
             detected_fs = self._detect_sampling_rate(times)
             self.detector = CloggingDetector(fs=detected_fs, sigma=self._sigma)
-            print(f"Detector initialized with fs={detected_fs} Hz")
+            # Re-pace inter-sample delay against the actual sampling rate.
+            self.delay = (1.0 / detected_fs) / self.speed_multiplier
+            print(
+                f"Detector initialized with fs={detected_fs} Hz, "
+                f"delay={self.delay:.4f}s ({self.speed_multiplier}x)"
+            )
 
             self.detector.calibrate(buffer)
             await websocket.send_json({"type": "status", "message": "Calibration Done"})
-            await websocket.send_json({
-                "type": "thresholds",
-                "sigma": self.detector.sigma,
-                "fft_threshold": self.detector.fft_threshold,
-                "static_threshold": self.detector.critical_threshold,
-                "composite_baseline_mean": self.detector.baseline_composite_mean,
-                "composite_baseline_std": self.detector.baseline_composite_std,
-                "sampling_hz": detected_fs,
-            })
+            await websocket.send_json(
+                {
+                    "type": "thresholds",
+                    "sigma": self.detector.sigma,
+                    "fft_threshold": self.detector.fft_threshold,
+                    "static_threshold": self.detector.critical_threshold,
+                    "composite_baseline_mean": self.detector.baseline_composite_mean,
+                    "composite_baseline_std": self.detector.baseline_composite_std,
+                    "sampling_hz": detected_fs,
+                }
+            )
         except Exception as e:
             print(f"Calibration failed: {e}")
             buffer.clear()
@@ -150,7 +195,9 @@ class SimulationEngine:
             return DEFAULT_SAMPLING_HZ
         return round(1.0 / float(np.median(valid)), 2)
 
-    def _build_calibrating_payload(self, t: float, flow: float, dP: float, raw_data: Dict) -> Dict:
+    def _build_calibrating_payload(
+        self, t: float, flow: float, dP: float, raw_data: Dict
+    ) -> Dict:
         return {
             "type": "data",
             "time": t,
@@ -164,28 +211,47 @@ class SimulationEngine:
             "raw": raw_data,
         }
 
-    def _build_detection_payload(self, t: float, flow: float, dP: float, raw_data: Dict) -> Dict:
+    def _build_detection_payload(
+        self, t: float, flow: float, dP: float, raw_data: Dict
+    ) -> Dict:
         try:
             results = self.detector.process_sample(dP, t)
             if results:
                 return self._build_payload(t, flow, dP, results, raw_data)
+            # Buffer is still warming up after calibration (window_size samples needed).
+            buffer_pct = int(
+                100 * len(self.detector.buffer) / self.detector.window_size
+            )
+            return {
+                "type": "data",
+                "time": t,
+                "flow": flow,
+                "pressure_drop": dP,
+                "status": "buffering",
+                "buffer_pct": buffer_pct,
+                "limit_threshold": self.detector.fft_threshold,
+                "static_threshold": self.detector.critical_threshold,
+                "current_sigma": self.detector.sigma,
+                "traffic_light": "gray",
+                "raw": raw_data,
+            }
         except Exception as e:
             print(f"Detection Error at t={t}: {e}")
-        return {
-            "type": "data",
-            "time": t,
-            "flow": flow,
-            "pressure_drop": dP,
-            "raw": raw_data,
-            "error": "Calculation Failed",
-        }
+            return {
+                "type": "data",
+                "time": t,
+                "flow": flow,
+                "pressure_drop": dP,
+                "raw": raw_data,
+                "error": "Calculation Failed",
+            }
 
     async def _maybe_send(self, websocket, payload: Dict) -> None:
         """Send payload on every Nth frame to reduce wire rate."""
         if not payload:
             return
         self._frame_count += 1
-        if self._frame_count % FRAME_SKIP_RATE != 0:
+        if self._frame_count % self.frame_skip_rate != 0:
             return
         try:
             await websocket.send_json(payload)
@@ -193,8 +259,14 @@ class SimulationEngine:
             print(f"WebSocket Send Error: {e}")
             self.running = False
 
-    def _build_payload(self, time: float, flow: float, pressure_drop: float,
-                       results: Dict[str, Any], raw_data: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
+    def _build_payload(
+        self,
+        time: float,
+        flow: float,
+        pressure_drop: float,
+        results: Dict[str, Any],
+        raw_data: Optional[Dict[str, float]] = None,
+    ) -> Dict[str, Any]:
         return {
             "type": "data",
             "time": time,
@@ -204,8 +276,12 @@ class SimulationEngine:
             "static_score": results.get("static", 0),
             "spectral_slope": results.get("spectral_slope", 0),
             "turbulence_score": results.get("turbulence", 0),
-            "limit_threshold": results.get("fft_threshold", self.detector.fft_threshold),
-            "static_threshold": results.get("static_threshold", self.detector.critical_threshold),
+            "limit_threshold": results.get(
+                "fft_threshold", self.detector.fft_threshold
+            ),
+            "static_threshold": results.get(
+                "static_threshold", self.detector.critical_threshold
+            ),
             "current_sigma": results.get("current_sigma", self.detector.sigma),
             "traffic_light": results.get("light_color", "gray"),
             "light_msg": results.get("status_msg", ""),

@@ -2,22 +2,19 @@
 import pandas as pd
 import os
 import numpy as np
-from typing import Dict, List, Tuple, Any, Optional, Generator
+from typing import Dict, List, Any, Optional, Generator
 
 
 class ColumnMetadata:
     """Metadata about a column in the data file."""
+
     def __init__(self, name: str, col_type: str = "numeric", unit: str = ""):
         self.name = name
         self.col_type = col_type
         self.unit = unit
 
     def to_dict(self) -> Dict[str, str]:
-        return {
-            "name": self.name,
-            "type": self.col_type,
-            "unit": self.unit
-        }
+        return {"name": self.name, "type": self.col_type, "unit": self.unit}
 
 
 class DataStreamer:
@@ -28,6 +25,7 @@ class DataStreamer:
     - Auto-detects Sampling Rate (Hz) from Time column.
     - Extracts ALL numeric columns for user selection.
     """
+
     def __init__(self, path: str):
         self.path = path
         self.columns: List[ColumnMetadata] = []
@@ -45,9 +43,11 @@ class DataStreamer:
             List of column metadata dicts with name, type, and unit.
         """
         try:
-            if filepath.endswith('.csv'):
-                df = pd.read_csv(filepath, sep = None, dtype=str, engine="python", nrows=10)
-            elif filepath.endswith('.xlsx'):
+            if filepath.endswith(".csv"):
+                df = pd.read_csv(
+                    filepath, sep=None, dtype=str, engine="python", nrows=10
+                )
+            elif filepath.endswith(".xlsx"):
                 df = pd.read_excel(filepath, engine="calamine", nrows=10)
             else:
                 return []
@@ -73,11 +73,7 @@ class DataStreamer:
                     unit = u
                     break
 
-            columns.append({
-                "name": col,
-                "type": "numeric",
-                "unit": unit
-            })
+            columns.append({"name": col, "type": "numeric", "unit": unit})
 
         return columns
 
@@ -97,16 +93,16 @@ class DataStreamer:
             raise ValueError("Path not found.")
 
         global_time_counter = 0.0
-        
+
         # 2. Iterate Files
         for file_path in files_to_read:
             print(f"Streaming: {file_path}")
-            
+
             # LOAD DATA
             try:
-                if file_path.endswith('.csv'):
-                    df = pd.read_csv(file_path, sep = None, dtype=str, engine="python")
-                elif file_path.endswith('.xlsx'):
+                if file_path.endswith(".csv"):
+                    df = pd.read_csv(file_path, sep=None, dtype=str, engine="python")
+                elif file_path.endswith(".xlsx"):
                     df = pd.read_excel(file_path, engine="calamine")
                 else:
                     continue
@@ -121,38 +117,42 @@ class DataStreamer:
                         v = float(x)
                         return 0.0 if (np.isnan(v) or np.isinf(v)) else v
                     try:
-                        v = float(str(x).replace(',', '.'))
+                        v = float(str(x).replace(",", "."))
                         return 0.0 if (np.isnan(v) or np.isinf(v)) else v
                     except (ValueError, TypeError):
                         return 0.0
 
                 # --- STEP 1: AUTO-DETECT TIME STEP (dt) ---
-                current_dt = 0.05 # Default 20Hz
-                
+                current_dt = 0.05  # Default 20Hz
+
                 time_aliases = ["Time", "timestamp", "Date/Time", "Tid"]
                 raw_time = self.get_column_data(df, time_aliases, optional=True)
-                
+
                 if raw_time is not None:
                     try:
                         # CRITICAL FIX: Handle European timestamps "10:00:01,500"
                         # We force convert to string, replace comma with dot, then parse.
-                        time_str = raw_time.astype(str).str.replace(',', '.')
-                        t_objs = pd.to_datetime(time_str, errors='coerce', format='mixed')
-                        
+                        time_str = raw_time.astype(str).str.replace(",", ".")
+                        t_objs = pd.to_datetime(
+                            time_str, errors="coerce", format="mixed"
+                        )
+
                         # Calculate median difference between rows
                         deltas = t_objs.diff().dt.total_seconds().dropna()
-                        
+
                         # Filter out zeros (duplicate rows) and huge jumps
                         valid_deltas = deltas[(deltas > 0) & (deltas < 60)]
-                        
+
                         if len(valid_deltas) > 0:
                             # Take median of first 100 points to establish speed
                             calculated_dt = valid_deltas.head(100).median()
-                            
+
                             if calculated_dt > 0:
                                 current_dt = calculated_dt
                                 hz = 1 / current_dt
-                                print(f"   -> Detected Speed: {hz:.2f} Hz (step={current_dt:.4f}s)")
+                                print(
+                                    f"   -> Detected Speed: {hz:.2f} Hz (step={current_dt:.4f}s)"
+                                )
                     except Exception as e:
                         print(f"   -> Time parsing failed ({e}). Defaulting to 20Hz.")
 
@@ -181,12 +181,28 @@ class DataStreamer:
                         # Skip non-numeric columns
                         continue
 
-                print(f"   -> Found {len(numeric_columns)} numeric columns: {numeric_columns[:5]}...")
+                print(
+                    f"   -> Found {len(numeric_columns)} numeric columns: {numeric_columns[:5]}..."
+                )
 
                 # Also map the required columns for backward compatibility
-                flow_aliases = ["Flow rate (Mean)", "Flow rate (Arith. Mean)", "Flow rate"]
-                p_in_aliases = ["TS inlet pressure (Mean)", "Pressure after pump (Arith. Mean)", "Pressure after pump", "TS inlet pressure"]
-                p_out_aliases = ["TS outlet pressure (Mean)", "Pressure before pump (Arith. Mean)", "Pressure before pump", "TS outlet pressure"]
+                flow_aliases = [
+                    "Flow rate (Mean)",
+                    "Flow rate (Arith. Mean)",
+                    "Flow rate",
+                ]
+                p_in_aliases = [
+                    "TS inlet pressure (Mean)",
+                    "Pressure after pump (Arith. Mean)",
+                    "Pressure after pump",
+                    "TS inlet pressure",
+                ]
+                p_out_aliases = [
+                    "TS outlet pressure (Mean)",
+                    "Pressure before pump (Arith. Mean)",
+                    "Pressure before pump",
+                    "TS outlet pressure",
+                ]
 
                 flow_col = self._find_column(df, flow_aliases)
                 p_in_col = self._find_column(df, p_in_aliases)
@@ -197,8 +213,10 @@ class DataStreamer:
                 actual_times = None
                 if raw_time is not None:
                     try:
-                        time_str = raw_time.astype(str).str.replace(',', '.')
-                        t_objs = pd.to_datetime(time_str, errors='coerce', format='mixed')
+                        time_str = raw_time.astype(str).str.replace(",", ".")
+                        t_objs = pd.to_datetime(
+                            time_str, errors="coerce", format="mixed"
+                        )
                         if t_objs.notna().sum() > 0:
                             t0 = t_objs.dropna().iloc[0]
                             actual_times = (t_objs - t0).dt.total_seconds().values
@@ -208,7 +226,11 @@ class DataStreamer:
                 # Yield Data as dictionary with ALL columns
                 for i in range(len(df)):
                     # Use actual timestamp or synthetic
-                    if actual_times is not None and i < len(actual_times) and not np.isnan(actual_times[i]):
+                    if (
+                        actual_times is not None
+                        and i < len(actual_times)
+                        and not np.isnan(actual_times[i])
+                    ):
                         row_time = global_time_counter + actual_times[i]
                     else:
                         row_time = global_time_counter + i * current_dt
@@ -229,7 +251,7 @@ class DataStreamer:
                         "p_in": p_in,
                         "p_out": p_out,
                         "raw": raw_data,
-                        "columns": numeric_columns
+                        "columns": numeric_columns,
                     }
 
                 # Update global counter for next file
@@ -260,5 +282,6 @@ class DataStreamer:
         for name in aliases:
             if name in df.columns:
                 return df[name]
-        if optional: return None
+        if optional:
+            return None
         raise KeyError(f"Could not find any of: {aliases}")

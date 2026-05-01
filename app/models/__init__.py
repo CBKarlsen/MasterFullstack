@@ -11,10 +11,10 @@ from .base import BaseModel, ModelMetadata, ModelType, InputType
 from .registry import ModelRegistry, get_registry
 
 __all__ = [
-    'BaseModel',
-    'ModelMetadata',
-    'ModelType',
-    'InputType',
-    'ModelRegistry',
-    'get_registry',
+    "BaseModel",
+    "ModelMetadata",
+    "ModelType",
+    "InputType",
+    "ModelRegistry",
+    "get_registry",
 ]

@@ -10,4 +10,4 @@ from .fft_physics import FFTPhysicsModel
 from .random_forest import RandomForestModel
 from .isolation_forest import IsolationForestModel
 
-__all__ = ['FFTPhysicsModel', 'RandomForestModel', 'IsolationForestModel']
+__all__ = ["FFTPhysicsModel", "RandomForestModel", "IsolationForestModel"]

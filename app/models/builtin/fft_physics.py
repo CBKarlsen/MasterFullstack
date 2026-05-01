@@ -49,8 +49,10 @@ class FFTPhysicsModel(BaseModel):
             model_type=ModelType.BUILTIN,
             input_type=InputType.SINGLE,
             input_features=[
-                "static_score", "composite_score",
-                "turbulence_score", "spectral_slope"
+                "static_score",
+                "composite_score",
+                "turbulence_score",
+                "spectral_slope",
             ],
             output_type="probability",
             enabled=True,
@@ -77,10 +79,10 @@ class FFTPhysicsModel(BaseModel):
             PredictionResult with combined probability
         """
         try:
-            static = features.get('static_score', 0.0)
-            composite = features.get('composite_score', 0.0)
-            turbulence = features.get('turbulence_score', 0.0)
-            slope = features.get('spectral_slope', -2.5)
+            static = features.get("static_score", 0.0)
+            composite = features.get("composite_score", 0.0)
+            turbulence = features.get("turbulence_score", 0.0)
+            slope = features.get("spectral_slope", -2.5)
 
             # Calculate component scores
 
@@ -100,22 +102,24 @@ class FFTPhysicsModel(BaseModel):
             # Combine scores with weights
             # Slope is most physics-grounded, composite is empirically useful
             weights = {
-                'slope': 0.4,
-                'ratio': 0.35,
-                'static': 0.25,
+                "slope": 0.4,
+                "ratio": 0.35,
+                "static": 0.25,
             }
 
             probability = (
-                weights['slope'] * slope_score +
-                weights['ratio'] * ratio_score +
-                weights['static'] * static_score
+                weights["slope"] * slope_score
+                + weights["ratio"] * ratio_score
+                + weights["static"] * static_score
             )
 
             # Clamp to [0, 1]
             probability = max(0.0, min(1.0, probability))
 
             # Calculate confidence based on feature consistency
-            confidence = self._calculate_confidence(slope_score, ratio_score, static_score)
+            confidence = self._calculate_confidence(
+                slope_score, ratio_score, static_score
+            )
 
             return PredictionResult(
                 probability=probability,
@@ -127,19 +131,17 @@ class FFTPhysicsModel(BaseModel):
                     "ratio_score": ratio_score,
                     "static_score": static_score,
                     "traffic_light": self._to_traffic_light(probability),
-                }
+                },
             )
 
         except Exception as e:
             return PredictionResult(
-                probability=0.0,
-                confidence=0.0,
-                extras={"error": str(e)}
+                probability=0.0, confidence=0.0, extras={"error": str(e)}
             )
 
     def validate_features(self, features: Dict[str, Any]) -> bool:
         """Check if required features are present."""
-        required = ['static_score', 'composite_score', 'spectral_slope']
+        required = ["static_score", "composite_score", "spectral_slope"]
         return all(f in features for f in required)
 
     def _slope_to_score(self, slope: float) -> float:
@@ -156,7 +158,9 @@ class FFTPhysicsModel(BaseModel):
         # Map slope from [-3.5, -1.0] to [0, 1]
         # -3.0 -> 0 (healthy)
         # -1.0 -> 1 (clogged)
-        normalized = (slope - self.slope_healthy_min) / (self.slope_healthy_max - self.slope_healthy_min)
+        normalized = (slope - self.slope_healthy_min) / (
+            self.slope_healthy_max - self.slope_healthy_min
+        )
 
         # Invert so higher slope (less negative) = higher score
         score = 1.0 - normalized
@@ -182,8 +186,9 @@ class FFTPhysicsModel(BaseModel):
 
         return max(0.0, min(1.0, score))
 
-    def _calculate_confidence(self, slope_score: float, ratio_score: float,
-                               static_score: float) -> float:
+    def _calculate_confidence(
+        self, slope_score: float, ratio_score: float, static_score: float
+    ) -> float:
         """
         Calculate confidence based on agreement between indicators.
 

@@ -70,17 +70,19 @@ class SklearnWrapper(BaseModel):
             X = sequence.reshape(1, -1)  # Flatten for sklearn
         else:
             # Single feature vector
-            X = np.array([[
-                features.get(f, 0.0) for f in self._metadata.input_features
-            ]])
+            X = np.array(
+                [[features.get(f, 0.0) for f in self._metadata.input_features]]
+            )
 
         try:
             # Try predict_proba first (for classifiers)
-            if hasattr(self._model, 'predict_proba'):
+            if hasattr(self._model, "predict_proba"):
                 proba = self._model.predict_proba(X)
                 # Assume binary classification, class 1 = clogging
-                probability = float(proba[0][1]) if proba.shape[1] > 1 else float(proba[0][0])
-            elif hasattr(self._model, 'predict'):
+                probability = (
+                    float(proba[0][1]) if proba.shape[1] > 1 else float(proba[0][0])
+                )
+            elif hasattr(self._model, "predict"):
                 # Fallback to predict (for regressors)
                 pred = self._model.predict(X)
                 probability = float(np.clip(pred[0], 0.0, 1.0))
@@ -89,7 +91,7 @@ class SklearnWrapper(BaseModel):
 
             # Get confidence from decision function if available
             confidence = 1.0
-            if hasattr(self._model, 'decision_function'):
+            if hasattr(self._model, "decision_function"):
                 try:
                     decision = self._model.decision_function(X)
                     # Convert distance to confidence (sigmoid-like)
@@ -105,9 +107,7 @@ class SklearnWrapper(BaseModel):
 
         except Exception as e:
             return PredictionResult(
-                probability=0.0,
-                confidence=0.0,
-                extras={"error": str(e)}
+                probability=0.0, confidence=0.0, extras={"error": str(e)}
             )
 
     def validate_features(self, features: Dict[str, Any]) -> bool:
@@ -133,7 +133,7 @@ class SklearnWrapper(BaseModel):
             return "critical"
 
     @classmethod
-    def load(cls, path: str) -> Optional['SklearnWrapper']:
+    def load(cls, path: str) -> Optional["SklearnWrapper"]:
         """
         Load sklearn model from .pkl file.
 
@@ -167,11 +167,11 @@ class SklearnWrapper(BaseModel):
     @classmethod
     def _load_metadata(cls, model_path: str) -> ModelMetadata:
         """Load metadata from companion JSON file or generate defaults."""
-        json_path = Path(model_path).with_suffix('.json')
+        json_path = Path(model_path).with_suffix(".json")
 
         if json_path.exists():
             try:
-                with open(json_path, 'r') as f:
+                with open(json_path, "r") as f:
                     data = json.load(f)
                 return ModelMetadata.from_dict(data)
             except Exception as e:

@@ -15,6 +15,7 @@ import numpy as np
 try:
     import torch
     import torch.nn as nn
+
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
@@ -54,7 +55,7 @@ class PyTorchWrapper(BaseModel):
         self._device = device
 
         # Set model to evaluation mode
-        if hasattr(self._model, 'eval'):
+        if hasattr(self._model, "eval"):
             self._model.eval()
 
     @property
@@ -74,7 +75,9 @@ class PyTorchWrapper(BaseModel):
             PredictionResult with probability
         """
         if not TORCH_AVAILABLE:
-            return PredictionResult(probability=0.0, extras={"error": "PyTorch not installed"})
+            return PredictionResult(
+                probability=0.0, extras={"error": "PyTorch not installed"}
+            )
 
         try:
             with torch.no_grad():
@@ -113,9 +116,7 @@ class PyTorchWrapper(BaseModel):
 
         except Exception as e:
             return PredictionResult(
-                probability=0.0,
-                confidence=0.0,
-                extras={"error": str(e)}
+                probability=0.0, confidence=0.0, extras={"error": str(e)}
             )
 
     def validate_features(self, features: Dict[str, Any]) -> bool:
@@ -142,13 +143,14 @@ class PyTorchWrapper(BaseModel):
             with torch.no_grad():
                 if self._metadata.input_type == InputType.SEQUENCE:
                     dummy = torch.zeros(
-                        1, self._metadata.sequence_length,
-                        len(self._metadata.input_features)
+                        1,
+                        self._metadata.sequence_length,
+                        len(self._metadata.input_features),
                     ).to(self._device)
                 else:
-                    dummy = torch.zeros(
-                        1, len(self._metadata.input_features)
-                    ).to(self._device)
+                    dummy = torch.zeros(1, len(self._metadata.input_features)).to(
+                        self._device
+                    )
 
                 _ = self._model(dummy)
         except Exception as e:
@@ -173,7 +175,7 @@ class PyTorchWrapper(BaseModel):
             return "critical"
 
     @classmethod
-    def load(cls, path: str) -> Optional['PyTorchWrapper']:
+    def load(cls, path: str) -> Optional["PyTorchWrapper"]:
         """
         Load PyTorch model from .pt or .pth file.
 
@@ -200,7 +202,9 @@ class PyTorchWrapper(BaseModel):
 
             # If it's a state dict, we need the model architecture
             if isinstance(model, dict):
-                print(f"[PyTorchWrapper] State dict found, need model architecture for {path}")
+                print(
+                    f"[PyTorchWrapper] State dict found, need model architecture for {path}"
+                )
                 return None
 
         except Exception as e:
@@ -215,11 +219,11 @@ class PyTorchWrapper(BaseModel):
     @classmethod
     def _load_metadata(cls, model_path: str) -> ModelMetadata:
         """Load metadata from companion JSON file or generate defaults."""
-        json_path = Path(model_path).with_suffix('.json')
+        json_path = Path(model_path).with_suffix(".json")
 
         if json_path.exists():
             try:
-                with open(json_path, 'r') as f:
+                with open(json_path, "r") as f:
                     data = json.load(f)
                 return ModelMetadata.from_dict(data)
             except Exception as e:

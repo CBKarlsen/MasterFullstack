@@ -10,21 +10,22 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 from enum import Enum
-import numpy as np
 
 
 class ModelType(Enum):
     """Supported model frameworks."""
-    SKLEARN = "sklearn"          # scikit-learn models (.pkl)
-    PYTORCH = "pytorch"          # PyTorch models (.pt, .pth)
-    TENSORFLOW = "tensorflow"    # TensorFlow/Keras models (.h5, SavedModel)
-    BUILTIN = "builtin"          # Built-in methods (FFT, physics-based)
-    CUSTOM = "custom"            # Custom implementations
+
+    SKLEARN = "sklearn"  # scikit-learn models (.pkl)
+    PYTORCH = "pytorch"  # PyTorch models (.pt, .pth)
+    TENSORFLOW = "tensorflow"  # TensorFlow/Keras models (.h5, SavedModel)
+    BUILTIN = "builtin"  # Built-in methods (FFT, physics-based)
+    CUSTOM = "custom"  # Custom implementations
 
 
 class InputType(Enum):
     """Model input requirements."""
-    SINGLE = "single"      # Single feature vector per prediction
+
+    SINGLE = "single"  # Single feature vector per prediction
     SEQUENCE = "sequence"  # Sliding window of feature vectors (for LSTM, etc.)
 
 
@@ -36,20 +37,26 @@ class ModelMetadata:
     This can be provided via a JSON file alongside the model file,
     or auto-generated with defaults.
     """
+
     name: str
     version: str = "1.0.0"
     author: str = "Unknown"
     description: str = ""
     model_type: ModelType = ModelType.SKLEARN
     input_type: InputType = InputType.SINGLE
-    input_features: List[str] = field(default_factory=lambda: [
-        "static_score", "composite_score", "turbulence_score", "spectral_slope"
-    ])
+    input_features: List[str] = field(
+        default_factory=lambda: [
+            "static_score",
+            "composite_score",
+            "turbulence_score",
+            "spectral_slope",
+        ]
+    )
     output_type: str = "probability"  # "probability", "classification", "regression"
-    sequence_length: int = 1          # For sequence models: number of timesteps
-    framework_version: str = ""       # e.g., "torch==2.0.1"
-    enabled: bool = True              # Whether model is active
-    weight: float = 1.0              # Ensemble trust weight (0 = ignored, 2 = double influence)
+    sequence_length: int = 1  # For sequence models: number of timesteps
+    framework_version: str = ""  # e.g., "torch==2.0.1"
+    enabled: bool = True  # Whether model is active
+    weight: float = 1.0  # Ensemble trust weight (0 = ignored, 2 = double influence)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to JSON-serializable dictionary."""
@@ -69,7 +76,7 @@ class ModelMetadata:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'ModelMetadata':
+    def from_dict(cls, data: Dict[str, Any]) -> "ModelMetadata":
         """Create from dictionary (e.g., from JSON file)."""
         return cls(
             name=data.get("name", "unknown"),
@@ -78,9 +85,15 @@ class ModelMetadata:
             description=data.get("description", ""),
             model_type=ModelType(data.get("model_type", "sklearn")),
             input_type=InputType(data.get("input_type", "single")),
-            input_features=data.get("input_features", [
-                "static_score", "composite_score", "turbulence_score", "spectral_slope"
-            ]),
+            input_features=data.get(
+                "input_features",
+                [
+                    "static_score",
+                    "composite_score",
+                    "turbulence_score",
+                    "spectral_slope",
+                ],
+            ),
             output_type=data.get("output_type", "probability"),
             sequence_length=data.get("sequence_length", 1),
             framework_version=data.get("framework_version", ""),
@@ -97,8 +110,9 @@ class PredictionResult:
     All models must return at least probability and confidence.
     Additional fields can be included in the extras dict.
     """
-    probability: float        # Clogging probability (0.0 - 1.0)
-    confidence: float = 1.0   # Model's confidence in prediction (0.0 - 1.0)
+
+    probability: float  # Clogging probability (0.0 - 1.0)
+    confidence: float = 1.0  # Model's confidence in prediction (0.0 - 1.0)
     classification: Optional[str] = None  # "healthy", "warning", "critical"
     extras: Dict[str, Any] = field(default_factory=dict)  # Model-specific outputs
 

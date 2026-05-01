@@ -92,7 +92,9 @@ class SequenceBuffer:
             ValueError if buffer is not ready.
         """
         if not self._ready:
-            raise ValueError(f"Buffer not ready: {len(self.buffer)}/{self.seq_len} samples")
+            raise ValueError(
+                f"Buffer not ready: {len(self.buffer)}/{self.seq_len} samples"
+            )
 
         return np.array(list(self.buffer), dtype=np.float32)
 
@@ -150,8 +152,9 @@ class MultiModelSequenceManager:
         """Initialize the manager."""
         self._buffers: Dict[str, SequenceBuffer] = {}
 
-    def register_model(self, model_name: str, sequence_length: int,
-                       feature_names: List[str]) -> None:
+    def register_model(
+        self, model_name: str, sequence_length: int, feature_names: List[str]
+    ) -> None:
         """
         Register a model that needs sequence buffering.
 
@@ -161,8 +164,7 @@ class MultiModelSequenceManager:
             feature_names: Feature names in expected order.
         """
         self._buffers[model_name] = SequenceBuffer(
-            sequence_length=sequence_length,
-            feature_names=feature_names
+            sequence_length=sequence_length, feature_names=feature_names
         )
 
     def unregister_model(self, model_name: str) -> None:
