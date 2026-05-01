@@ -18,12 +18,11 @@ from fastapi import (
     Form,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from typing import Optional
 import shutil
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
-
-_training_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="rf_train")
 
 from .engine import SimulationEngine
 from .models import get_registry
@@ -31,21 +30,7 @@ from .models.builtin import FFTPhysicsModel, RandomForestModel, IsolationForestM
 from .dataloader import DataStreamer
 from .batch import run_batch_analysis, recompute_thresholds
 
-# Initialize FastAPI app
-app = FastAPI(
-    title="Pipe Clogging Detection Platform",
-    description="Modular platform for pipe clogging prediction using FFT and ML models",
-    version="2.0.0",
-)
-
-# CORS configuration - allow React frontend to connect
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # In production, specify the frontend URL
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+_training_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="rf_train")
 
 # Get project root directory
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -53,9 +38,10 @@ MODELS_DIR = PROJECT_ROOT / "models"
 DATA_DIR = PROJECT_ROOT / "data"
 
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize model registry on server start."""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan: register built-in models and start the registry
+    file watcher at startup; stop the watcher at shutdown."""
     registry = get_registry(str(MODELS_DIR))
 
     # Register built-in models
@@ -70,12 +56,28 @@ async def startup_event():
     # Start watching for new model files
     registry.start_watching(poll_interval=5.0)
 
+    yield
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on server shutdown."""
-    registry = get_registry()
+    # Shutdown
     registry.stop_watching()
+
+
+# Initialize FastAPI app
+app = FastAPI(
+    title="Pipe Clogging Detection Platform",
+    description="Modular platform for pipe clogging prediction using FFT and ML models",
+    version="2.0.0",
+    lifespan=lifespan,
+)
+
+# CORS configuration - allow React frontend to connect
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify the frontend URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # =============================================================================

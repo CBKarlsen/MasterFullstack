@@ -51,7 +51,6 @@ class FFTPhysicsModel(BaseModel):
             input_features=[
                 "static_score",
                 "composite_score",
-                "turbulence_score",
                 "spectral_slope",
             ],
             output_type="probability",
@@ -81,7 +80,6 @@ class FFTPhysicsModel(BaseModel):
         try:
             static = features.get("static_score", 0.0)
             composite = features.get("composite_score", 0.0)
-            turbulence = features.get("turbulence_score", 0.0)
             slope = features.get("spectral_slope", -2.5)
 
             # Calculate component scores
@@ -196,7 +194,6 @@ class FFTPhysicsModel(BaseModel):
         If indicators disagree, confidence is lower.
         """
         scores = [slope_score, ratio_score, static_score]
-        mean = np.mean(scores)
         std = np.std(scores)
 
         # Lower variance = higher confidence

@@ -2,10 +2,11 @@
 import numpy as np
 import os
 
-# Try to import typical ML libs (catch errors if they aren't installed)
+# Try to import typical ML libs (catch errors if they aren't installed).
+# `joblib` is a scikit-learn dependency, so a successful joblib import
+# implies sklearn is available.
 try:
     import joblib  # Common for Scikit-Learn models
-    import sklearn
 except ImportError:
     joblib = None
 
@@ -39,7 +40,7 @@ class MLPredictor:
                 # Assuming model returns class 1 probability
                 probability = self.model.predict_proba(features)[0][1]
                 return probability
-            except:
+            except Exception:
                 return 0.0
         else:
             # DUMMY MODE (Placeholder for your thesis)

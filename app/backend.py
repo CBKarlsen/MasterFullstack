@@ -54,8 +54,10 @@ def _normalize_spectrum(spectrum: np.ndarray) -> np.ndarray:
     return spectrum / (np.sum(spectrum) + 1e-10)
 
 
-from .models import get_registry, InputType
-from .models.sequence_buffer import MultiModelSequenceManager
+# Imports placed below module-level helpers to avoid a circular import:
+# `app.models` indirectly references symbols defined above.
+from .models import get_registry, InputType  # noqa: E402
+from .models.sequence_buffer import MultiModelSequenceManager  # noqa: E402
 
 
 class CloggingDetector:
