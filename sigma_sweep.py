@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from app.batch import run_batch_analysis
 
 DATA_DIR = Path(__file__).parent / "data"
-SIGMAS = [3, 4, 5]
+SIGMAS = [1, 2, 3, 4, 5, 6, 7, 8]
 OUTPUT_CSV = Path(__file__).parent / "sigma_sweep_results.csv"
 SUPPORTED_EXTENSIONS = {".xlsx", ".csv", ".xls"}
 
