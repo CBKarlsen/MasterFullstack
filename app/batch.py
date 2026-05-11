@@ -154,6 +154,7 @@ def run_batch_analysis(
         if not columns:
             columns = data_point.get("columns", [])
 
+        calibration_buffer.append(dP)
         calibration_times.append(t)
         all_raw_points.append({
             "time": t,

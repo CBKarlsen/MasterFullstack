@@ -496,31 +496,53 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
 						</p>
 					</div>
 					<div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-						<div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-							<label
-								style={{ fontSize: "13px", color: "#6b7280" }}
-								title="0 = match real-time exactly (uses dynamic per-fs calibration). Set >0 to override."
+						<div
+							style={{
+								display: "flex",
+								flexDirection: "column",
+								alignItems: "flex-start",
+								gap: "2px",
+							}}
+						>
+							<div
+								style={{ display: "flex", alignItems: "center", gap: "8px" }}
 							>
-								Calibration seconds:
-							</label>
-							<input
-								type="number"
-								value={calibrationSeconds}
-								onChange={(e) =>
-									setCalibrationSeconds(Math.max(0, Number(e.target.value)))
-								}
-								min={0}
-								max={300}
-								step={5}
-								title="0 = match real-time"
+								<label
+									style={{ fontSize: "13px", color: "#6b7280" }}
+									title="Calibration length in seconds. 0 = match real-time (dynamic per-fs window). Any positive value overrides for sensitivity studies."
+								>
+									Calibration length:
+								</label>
+								<input
+									type="number"
+									value={calibrationSeconds}
+									onChange={(e) =>
+										setCalibrationSeconds(Math.max(0, Number(e.target.value)))
+									}
+									min={0}
+									max={300}
+									step={5}
+									title="0 = match real-time"
+									style={{
+										width: "80px",
+										padding: "6px 8px",
+										borderRadius: "6px",
+										border: "1px solid #e5e7eb",
+										fontSize: "13px",
+									}}
+								/>
+							</div>
+							<span
 								style={{
-									width: "80px",
-									padding: "6px 8px",
-									borderRadius: "6px",
-									border: "1px solid #e5e7eb",
-									fontSize: "13px",
+									fontSize: "11px",
+									color: calibrationSeconds === 0 ? "#059669" : "#9ca3af",
+									marginLeft: "2px",
 								}}
-							/>
+							>
+								{calibrationSeconds === 0
+									? "Match real-time"
+									: `${calibrationSeconds} s (override)`}
+							</span>
 						</div>
 						<button
 							onClick={runAnalysis}
