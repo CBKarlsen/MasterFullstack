@@ -181,7 +181,8 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
 	const [error, setError] = useState<string | null>(null);
 	const [sigma, setSigma] = useState(3.0);
 	const [thresholds, setThresholds] = useState<Thresholds | null>(null);
-	const [calibrationSeconds, setCalibrationSeconds] = useState(120);
+	// 0 ⇒ match real-time exactly (omit calibration_seconds → backend uses dynamic sample count)
+	const [calibrationSeconds, setCalibrationSeconds] = useState(0);
 	const [smoothingWindowSec, setSmoothingWindowSec] = useState(60);
 	const [criticalMultiplier, setCriticalMultiplier] = useState(2.0);
 	const [logEntries, setLogEntries] = useState<LogEntry[]>(() => loadLog());
@@ -243,8 +244,12 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
 		setError(null);
 
 		try {
+			const calibParam =
+				calibrationSeconds > 0
+					? `&calibration_seconds=${calibrationSeconds}`
+					: "";
 			const response = await axios.post<AnalysisResult>(
-				`/api/analyze?file=${encodeURIComponent(selectedFile)}&sigma=${sigma}&calibration_seconds=${calibrationSeconds}`,
+				`/api/analyze?file=${encodeURIComponent(selectedFile)}&sigma=${sigma}${calibParam}`,
 			);
 			setResult(response.data);
 			setThresholds(response.data.thresholds);
@@ -492,18 +497,22 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
 					</div>
 					<div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
 						<div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-							<label style={{ fontSize: "13px", color: "#6b7280" }}>
+							<label
+								style={{ fontSize: "13px", color: "#6b7280" }}
+								title="0 = match real-time exactly (uses dynamic per-fs calibration). Set >0 to override."
+							>
 								Calibration seconds:
 							</label>
 							<input
 								type="number"
 								value={calibrationSeconds}
 								onChange={(e) =>
-									setCalibrationSeconds(Math.max(5, Number(e.target.value)))
+									setCalibrationSeconds(Math.max(0, Number(e.target.value)))
 								}
-								min={5}
+								min={0}
 								max={300}
 								step={5}
+								title="0 = match real-time"
 								style={{
 									width: "80px",
 									padding: "6px 8px",
