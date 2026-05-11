@@ -8,9 +8,10 @@ want to see the full picture and tweak parameters like sigma.
 """
 
 import numpy as np
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from .backend import CloggingDetector, _sigma_to_pct
 from .dataloader import DataStreamer
+from .engine import detect_sampling_rate
 from .forecast import compute_clogging_forecast, compute_flow_eta
 from .models import get_registry
 
@@ -117,20 +118,30 @@ def _apply_batch_ml(
 def run_batch_analysis(
     filepath: str,
     sigma: float = 3.0,
-    calibration_seconds: float = 120,
-    fs: float = None,  # None = auto-detect
+    calibration_seconds: Optional[float] = None,
+    fs: Optional[float] = None,  # None = auto-detect
     window_sec: float = 30.0,
 ) -> Dict[str, Any]:
+    """Run batch analysis.
+
+    Args:
+        calibration_seconds: If None, uses the same dynamic sample count as the
+            real-time engine — ``CloggingDetector.required_calibration_samples(fs)``
+            — so both modes produce identical scores. Pass an explicit value only
+            to override that for sensitivity studies.
+        fs: If None, fs is detected from timestamp deltas using the same
+            median-of-deltas method as the real-time engine.
+    """
 
     streamer_obj = DataStreamer(filepath)
     streamer = streamer_obj.stream()
 
-    # Phase 1: Collect calibration data and detect sampling rate
-    calibration_buffer = []
-    all_raw_points = []
-    columns = []
-    detected_fs = None
-    calibration_samples = None
+    # Phase 1: collect calibration data. Use the same sample count as real-time
+    # by default so both modes produce identical scores for the same file.
+    calibration_buffer: List[float] = []
+    calibration_times: List[float] = []
+    all_raw_points: List[Dict[str, Any]] = []
+    columns: List[str] = []
 
     for data_point in streamer:
         t = data_point.get("time", 0.0)
@@ -144,40 +155,30 @@ def run_batch_analysis(
             columns = data_point.get("columns", [])
 
         calibration_buffer.append(dP)
-        all_raw_points.append(
-            {
-                "time": t,
-                "flow": flow,
-                "pressure_drop": dP,
-                "raw": _sanitize(raw_data),
-            }
-        )
+        calibration_times.append(t)
+        all_raw_points.append({
+            "time": t,
+            "flow": flow,
+            "pressure_drop": dP,
+            "raw": _sanitize(raw_data),
+        })
 
-        # Detect fs from first two points
-        if detected_fs is None and len(all_raw_points) >= 2:
-            dt = all_raw_points[1]["time"] - all_raw_points[0]["time"]
-            if dt > 0:
-                detected_fs = round(1.0 / dt, 2)
-                actual_fs = fs if fs is not None else detected_fs
-                calibration_samples = max(int(calibration_seconds * actual_fs), 50)
-                print(
-                    f"Detected fs={actual_fs} Hz → need {calibration_samples} samples for {calibration_seconds}s calibration"
-                )
+        # We need fs before we know how many samples to collect. Once we have
+        # enough timestamps to estimate fs, size the buffer to match real-time:
+        #   - default: CloggingDetector.required_calibration_samples(fs)
+        #   - override: calibration_seconds * fs (for sensitivity studies)
+        if len(calibration_buffer) >= 100:
+            tentative_fs = fs if fs is not None else detect_sampling_rate(calibration_times)
+            if calibration_seconds is None:
+                needed = CloggingDetector.required_calibration_samples(tentative_fs, window_sec)
+            else:
+                needed = max(int(calibration_seconds * tentative_fs), 50)
+            if len(calibration_buffer) >= needed:
+                break
 
-        # Stop when we have enough (only after calibration_samples is computed)
-        if (
-            calibration_samples is not None
-            and len(calibration_buffer) >= calibration_samples
-        ):
-            break
-
-    # Fallback if fs was never detected
-    actual_fs = fs if fs is not None else (detected_fs if detected_fs else 20.0)
-    if calibration_samples is None:
-        calibration_samples = max(int(calibration_seconds * actual_fs), 50)
-    print(
-        f"Batch analysis using fs={actual_fs} Hz, calibration={len(calibration_buffer)} samples ({calibration_seconds}s)"
-    )
+    actual_fs = fs if fs is not None else detect_sampling_rate(calibration_times)
+    calibration_samples = len(calibration_buffer)
+    print(f"Batch analysis using fs={actual_fs} Hz, calibration={calibration_samples} samples")
 
     # Now create detector with correct fs.
     # enable_models=False skips per-sample ML inference; we batch-predict at the end.

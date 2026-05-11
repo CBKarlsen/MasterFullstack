@@ -181,7 +181,8 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
 	const [error, setError] = useState<string | null>(null);
 	const [sigma, setSigma] = useState(3.0);
 	const [thresholds, setThresholds] = useState<Thresholds | null>(null);
-	const [calibrationSeconds, setCalibrationSeconds] = useState(120);
+	// 0 ⇒ match real-time exactly (omit calibration_seconds → backend uses dynamic sample count)
+	const [calibrationSeconds, setCalibrationSeconds] = useState(0);
 	const [smoothingWindowSec, setSmoothingWindowSec] = useState(60);
 	const [criticalMultiplier, setCriticalMultiplier] = useState(2.0);
 	const [logEntries, setLogEntries] = useState<LogEntry[]>(() => loadLog());
@@ -243,8 +244,12 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
 		setError(null);
 
 		try {
+			const calibParam =
+				calibrationSeconds > 0
+					? `&calibration_seconds=${calibrationSeconds}`
+					: "";
 			const response = await axios.post<AnalysisResult>(
-				`/api/analyze?file=${encodeURIComponent(selectedFile)}&sigma=${sigma}&calibration_seconds=${calibrationSeconds}`,
+				`/api/analyze?file=${encodeURIComponent(selectedFile)}&sigma=${sigma}${calibParam}`,
 			);
 			setResult(response.data);
 			setThresholds(response.data.thresholds);
@@ -491,27 +496,53 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
 						</p>
 					</div>
 					<div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-						<div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-							<label style={{ fontSize: "13px", color: "#6b7280" }}>
-								Calibration seconds:
-							</label>
-							<input
-								type="number"
-								value={calibrationSeconds}
-								onChange={(e) =>
-									setCalibrationSeconds(Math.max(5, Number(e.target.value)))
-								}
-								min={5}
-								max={300}
-								step={5}
+						<div
+							style={{
+								display: "flex",
+								flexDirection: "column",
+								alignItems: "flex-start",
+								gap: "2px",
+							}}
+						>
+							<div
+								style={{ display: "flex", alignItems: "center", gap: "8px" }}
+							>
+								<label
+									style={{ fontSize: "13px", color: "#6b7280" }}
+									title="Calibration length in seconds. 0 = match real-time (dynamic per-fs window). Any positive value overrides for sensitivity studies."
+								>
+									Calibration length:
+								</label>
+								<input
+									type="number"
+									value={calibrationSeconds}
+									onChange={(e) =>
+										setCalibrationSeconds(Math.max(0, Number(e.target.value)))
+									}
+									min={0}
+									max={300}
+									step={5}
+									title="0 = match real-time"
+									style={{
+										width: "80px",
+										padding: "6px 8px",
+										borderRadius: "6px",
+										border: "1px solid #e5e7eb",
+										fontSize: "13px",
+									}}
+								/>
+							</div>
+							<span
 								style={{
-									width: "80px",
-									padding: "6px 8px",
-									borderRadius: "6px",
-									border: "1px solid #e5e7eb",
-									fontSize: "13px",
+									fontSize: "11px",
+									color: calibrationSeconds === 0 ? "#059669" : "#9ca3af",
+									marginLeft: "2px",
 								}}
-							/>
+							>
+								{calibrationSeconds === 0
+									? "Match real-time"
+									: `${calibrationSeconds} s (override)`}
+							</span>
 						</div>
 						<button
 							onClick={runAnalysis}

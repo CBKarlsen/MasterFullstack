@@ -763,8 +763,11 @@ def list_data_files():
 async def analyze_file(
     file: str,
     sigma: float = 3.0,
-    calibration_seconds: float = 120.0,
+    calibration_seconds: Optional[float] = None,
 ):
+    """Run batch analysis. When ``calibration_seconds`` is omitted, batch uses
+    the same fixed sample count as the real-time engine so scores match.
+    """
     data_path = DATA_DIR / file
     if not data_path.exists():
         raise HTTPException(status_code=404, detail=f"File '{file}' not found")

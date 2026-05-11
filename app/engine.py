@@ -17,6 +17,22 @@ MIN_VALID_DELTA_SEC = 0.0  # Exclude zero-length deltas (duplicate rows)
 MAX_VALID_DELTA_SEC = 60.0  # Exclude huge gaps (file breaks, missing data)
 
 
+def detect_sampling_rate(times: list) -> float:
+    """Infer sampling frequency from median of timestamp deltas.
+
+    Shared by real-time (engine) and batch paths so both observe the same fs
+    for a given file. Uses the first 100 deltas, ignoring zero-length and
+    gap-sized deltas.
+    """
+    if len(times) < 2:
+        return DEFAULT_SAMPLING_HZ
+    deltas = np.diff(times[:100])
+    valid = deltas[(deltas > MIN_VALID_DELTA_SEC) & (deltas < MAX_VALID_DELTA_SEC)]
+    if len(valid) == 0:
+        return DEFAULT_SAMPLING_HZ
+    return round(1.0 / float(np.median(valid)), 2)
+
+
 class SimulationEngine:
     """Orchestrates the simulation loop for real-time clogging detection."""
 
@@ -93,7 +109,7 @@ class SimulationEngine:
                         not delay_locked
                         and len(calibration_times) >= CALIBRATION_FS_LOCK_AFTER
                     ):
-                        detected_fs = self._detect_sampling_rate(calibration_times)
+                        detected_fs = detect_sampling_rate(calibration_times)
                         self.delay = (1.0 / detected_fs) / self.speed_multiplier
                         # Scale frame-skip so wire rate ≈ TARGET_WIRE_HZ regardless of fs.
                         self.frame_skip_rate = max(1, int(detected_fs / TARGET_WIRE_HZ))
@@ -155,7 +171,7 @@ class SimulationEngine:
         if len(buffer) < self._required_calibration_samples:
             return True
         try:
-            detected_fs = self._detect_sampling_rate(times)
+            detected_fs = detect_sampling_rate(times)
             self.detector = CloggingDetector(fs=detected_fs, sigma=self._sigma)
             # Re-pace inter-sample delay against the actual sampling rate.
             self.delay = (1.0 / detected_fs) / self.speed_multiplier
@@ -183,17 +199,6 @@ class SimulationEngine:
             times.clear()
             return True
         return False
-
-    @staticmethod
-    def _detect_sampling_rate(times: list) -> float:
-        """Infer sampling frequency from median of timestamp deltas."""
-        if len(times) < 2:
-            return DEFAULT_SAMPLING_HZ
-        deltas = np.diff(times[:100])
-        valid = deltas[(deltas > MIN_VALID_DELTA_SEC) & (deltas < MAX_VALID_DELTA_SEC)]
-        if len(valid) == 0:
-            return DEFAULT_SAMPLING_HZ
-        return round(1.0 / float(np.median(valid)), 2)
 
     def _build_calibrating_payload(
         self, t: float, flow: float, dP: float, raw_data: Dict
