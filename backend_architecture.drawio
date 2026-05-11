@@ -1,0 +1,61 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Backend Architecture" id="backend-arch">
+    <mxGraphModel dx="1414" dy="761" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="container" parent="1" style="text;html=1;strokeColor=#6c8ebf;fillColor=#dae8fc;align=left;verticalAlign=top;spacingLeft=12;spacingTop=8;fontSize=14;fontStyle=1;rounded=1;arcSize=3;" value="Backend — FastAPI (port 8000)" vertex="1">
+          <mxGeometry height="710" width="720" x="40" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="main" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" value="&lt;b&gt;main.py&lt;/b&gt; — Router" vertex="1">
+          <mxGeometry height="55" width="200" x="300" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="engine" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" value="&lt;b&gt;engine.py&lt;/b&gt;&lt;br/&gt;SimulationEngine" vertex="1">
+          <mxGeometry height="55" width="190" x="110" y="265" as="geometry" />
+        </mxCell>
+        <mxCell id="batch" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" value="&lt;b&gt;batch.py&lt;/b&gt;&lt;br/&gt;Batch Analysis" vertex="1">
+          <mxGeometry height="55" width="190" x="500" y="265" as="geometry" />
+        </mxCell>
+        <mxCell id="backend" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;align=left;spacingLeft=14;fontSize=12;" value="&lt;b&gt;backend.py — CloggingDetector&lt;/b&gt;&lt;br/&gt;&lt;br/&gt;· Static score — hydraulic head deviation&lt;br/&gt;· Composite score — L1 FFT spectral distance&lt;br/&gt;· Turbulence score — high-band FFT energy&lt;br/&gt;· Spectral slope — log-log fit" vertex="1">
+          <mxGeometry height="115" width="460" x="170" y="405" as="geometry" />
+        </mxCell>
+        <mxCell id="dataloader" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" value="&lt;b&gt;dataloader.py&lt;/b&gt;&lt;br/&gt;DataStreamer&lt;br/&gt;CSV / XLSX parsing" vertex="1">
+          <mxGeometry height="80" width="200" x="100" y="615" as="geometry" />
+        </mxCell>
+        <mxCell id="models" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" value="&lt;b&gt;models/&lt;/b&gt;&lt;br/&gt;registry · builtins&lt;br/&gt;wrappers · sequence buffer" vertex="1">
+          <mxGeometry height="80" width="220" x="500" y="615" as="geometry" />
+        </mxCell>
+        <mxCell id="rest" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;fontSize=11;" value="REST /api/*" vertex="1">
+          <mxGeometry height="38" width="140" x="850" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="ws" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;fontSize=11;" value="WebSocket /ws/simulate" vertex="1">
+          <mxGeometry height="38" width="160" x="850" y="182" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="main" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="engine">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="main" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="batch">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="engine" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="backend">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="batch" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="backend">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="backend" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="dataloader">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="backend" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="models">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="main" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="rest">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" edge="1" parent="1" source="main" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="ws">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
