@@ -111,8 +111,12 @@ class SimulationEngine:
                     ):
                         detected_fs = detect_sampling_rate(calibration_times)
                         self.delay = (1.0 / detected_fs) / self.speed_multiplier
-                        # Scale frame-skip so wire rate ≈ TARGET_WIRE_HZ regardless of fs.
-                        self.frame_skip_rate = max(1, int(detected_fs / TARGET_WIRE_HZ))
+                        # Scale frame-skip by both fs and speed so the wire rate
+                        # stays near TARGET_WIRE_HZ at every playback speed.
+                        # Without the speed factor, 20x bursts ~40 Hz to the
+                        # browser and OOM-crashes the tab.
+                        effective_hz = detected_fs * self.speed_multiplier
+                        self.frame_skip_rate = max(1, int(effective_hz / TARGET_WIRE_HZ))
                         # Size calibration buffer to fit ≥21 spectral windows at this fs.
                         self._required_calibration_samples = (
                             CloggingDetector.required_calibration_samples(detected_fs)

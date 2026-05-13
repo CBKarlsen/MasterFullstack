@@ -339,9 +339,7 @@ export function CompositeChart({
 							stroke={areaStroke}
 							strokeWidth={2}
 							fill="url(#compositeGradient)"
-							isAnimationActive={true}
-							animationDuration={200}
-							animationEasing="ease-out"
+							isAnimationActive={false}
 						/>
 					</AreaChart>
 				</ResponsiveContainer>
