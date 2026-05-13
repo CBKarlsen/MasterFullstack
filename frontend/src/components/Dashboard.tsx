@@ -36,7 +36,7 @@ export function Dashboard() {
 		calibrationProgress,
 		availableColumns,
 		selectedColumns,
-		updateData,
+		updateDataBatch,
 		setModels,
 		toggleModel,
 		setSelectedColumns,
@@ -56,7 +56,7 @@ export function Dashboard() {
 
 	const { isConnected, startSimulation, stopSimulation, error } = useWebSocket(
 		wsUrl,
-		{ onMessage: updateData },
+		{ onBatch: updateDataBatch },
 	);
 
 	const fetchModels = useCallback(async () => {

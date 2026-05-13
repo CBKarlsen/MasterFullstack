@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SimulationConfig, SimulationData } from "../types";
 
+const MAX_BUFFERED_MESSAGES = 500;
+
 interface UseWebSocketOptions {
 	onMessage?: (data: SimulationData) => void;
+	onBatch?: (batch: SimulationData[]) => void;
 }
 
 interface UseWebSocketReturn {
@@ -17,14 +20,18 @@ export function useWebSocket(
 	url: string,
 	options: UseWebSocketOptions = {},
 ): UseWebSocketReturn {
-	const { onMessage } = options;
+	const { onMessage, onBatch } = options;
 
 	const wsRef = useRef<WebSocket | null>(null);
-	// Keep a stable ref to onMessage so the WebSocket callbacks never go stale
+	// Keep stable refs so the WebSocket callbacks never go stale
 	const onMessageRef = useRef(onMessage);
+	const onBatchRef = useRef(onBatch);
 	useEffect(() => {
 		onMessageRef.current = onMessage;
 	}, [onMessage]);
+	useEffect(() => {
+		onBatchRef.current = onBatch;
+	}, [onBatch]);
 
 	// Message buffer: accumulate incoming messages and flush once per animation frame
 	const bufferRef = useRef<SimulationData[]>([]);
@@ -42,13 +49,18 @@ export function useWebSocket(
 			const buf = bufferRef.current;
 			if (buf.length === 0) return;
 
-			// Process all buffered messages through the callback
-			for (const msg of buf) {
-				onMessageRef.current?.(msg);
+			bufferRef.current = [];
+
+			// Prefer a single batched callback to avoid per-message store writes
+			if (onBatchRef.current) {
+				onBatchRef.current(buf);
+			} else if (onMessageRef.current) {
+				for (const msg of buf) {
+					onMessageRef.current(msg);
+				}
 			}
 			// Only update React state with the latest message
 			setLastMessage(buf[buf.length - 1]);
-			bufferRef.current = [];
 		});
 	}, []);
 
@@ -92,8 +104,15 @@ export function useWebSocket(
 							return;
 						}
 
-						// Buffer the message and schedule a batched flush
+						// Buffer the message and schedule a batched flush.
+						// Cap the buffer so a slow renderer can't OOM the tab at high speeds.
 						bufferRef.current.push(data);
+						if (bufferRef.current.length > MAX_BUFFERED_MESSAGES) {
+							bufferRef.current.splice(
+								0,
+								bufferRef.current.length - MAX_BUFFERED_MESSAGES,
+							);
+						}
 						scheduleFlush();
 					} catch (e) {
 						console.error("Failed to parse WebSocket message:", e);

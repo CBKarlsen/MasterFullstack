@@ -281,9 +281,7 @@ export function CompositeControlChart({
 							stroke={isCurrentlyBreaching ? COLORS.breach : COLORS.normal}
 							strokeWidth={3}
 							dot={false}
-							isAnimationActive={true}
-							animationDuration={300}
-							animationEasing="ease-out"
+							isAnimationActive={false}
 						/>
 
 						{/* Optional: Also plot threshold as a line to show if it changes over time */}

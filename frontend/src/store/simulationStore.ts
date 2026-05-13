@@ -27,11 +27,17 @@ interface SimulationState {
 
 	// Actions
 	updateData: (data: SimulationData) => void;
+	updateDataBatch: (batch: SimulationData[]) => void;
 	setModels: (models: ModelMetadata[]) => void;
 	toggleModel: (name: string, enabled: boolean) => void;
 	updateModelWeight: (name: string, weight: number) => void;
 	setSelectedColumns: (columns: string[]) => void;
 	clearData: () => void;
+}
+
+function trimToMax<T>(arr: T[], max: number): T[] {
+	if (arr.length <= max) return arr;
+	return arr.slice(arr.length - max);
 }
 
 export const useSimulationStore = create<SimulationState>((set, get) => ({
@@ -41,7 +47,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
 	isCalibrating: false,
 	chartData: [],
 	rawChartData: [],
-	maxDataPoints: 5000, // Keep last 200000 points (~10000 seconds at 20Hz)
+	maxDataPoints: 2000,
 	availableColumns: [],
 	selectedColumns: [],
 	models: [],
@@ -180,6 +186,119 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
 					(isDataFromCalibration ? "Calibrating..." : "Running"),
 			});
 		}
+	},
+
+	updateDataBatch: (batch: SimulationData[]) => {
+		if (batch.length === 0) return;
+		const state = get();
+
+		let nextStatus = state.status;
+		let nextCalibrationProgress = state.calibrationProgress;
+		let nextIsCalibrating = state.isCalibrating;
+		let nextAvailableColumns = state.availableColumns;
+		let nextSelectedColumns = state.selectedColumns;
+		let lastDataMessage: SimulationData | null = null;
+
+		const appendedChart: ChartDataPoint[] = [];
+		const appendedRaw: RawDataPoint[] = [];
+
+		for (const data of batch) {
+			if (data.type === "status") {
+				nextStatus = data.message || "Unknown";
+				nextIsCalibrating =
+					data.message?.toLowerCase().includes("calibrat") || false;
+				continue;
+			}
+
+			if (data.type === "columns" && data.columns) {
+				nextAvailableColumns = data.columns;
+				if (nextSelectedColumns.length === 0) {
+					nextSelectedColumns = data.columns.slice(0, 4);
+				}
+				continue;
+			}
+
+			const isFromCalibration = data.status === "calibrating";
+			if (isFromCalibration && data.calibration_progress) {
+				nextStatus = `Calibrating: ${Math.round(data.calibration_progress * 100)}%`;
+				nextCalibrationProgress = data.calibration_progress;
+				nextIsCalibrating = true;
+			} else if (!isFromCalibration) {
+				nextIsCalibrating = false;
+			}
+
+			if (data.time === undefined) continue;
+
+			const point: ChartDataPoint = { time: data.time };
+			if (
+				data.ensemble_probability !== null &&
+				data.ensemble_probability !== undefined
+			) {
+				point.ensemble = data.ensemble_probability;
+			}
+			if (data.models && Object.keys(data.models).length > 0) {
+				Object.entries(data.models).forEach(([name, pred]) => {
+					point[name] = pred.probability || 0;
+				});
+			}
+			if (data.static_score !== undefined && data.static_score !== null) {
+				point.static = data.static_score;
+			}
+			if (data.composite_score !== undefined && data.composite_score !== null) {
+				point.composite = data.composite_score;
+			}
+			if (data.spectral_slope !== undefined && data.spectral_slope !== null) {
+				point.slope = data.spectral_slope;
+			}
+			if (data.limit_threshold !== undefined) {
+				point.limit_threshold = data.limit_threshold;
+			}
+			if (data.static_threshold !== undefined) {
+				point.static_threshold = data.static_threshold;
+			}
+			if (data.current_sigma !== undefined) {
+				point.current_sigma = data.current_sigma;
+			}
+
+			const rawPoint: RawDataPoint = { time: data.time };
+			if (data.raw) {
+				Object.entries(data.raw).forEach(([col, value]) => {
+					rawPoint[col] = value;
+				});
+			}
+			if (data.flow !== undefined) rawPoint["flow"] = data.flow;
+			if (data.pressure_drop !== undefined)
+				rawPoint["pressure_drop"] = data.pressure_drop;
+
+			appendedChart.push(point);
+			appendedRaw.push(rawPoint);
+			lastDataMessage = data;
+
+			nextStatus =
+				data.light_msg ||
+				(isFromCalibration ? "Calibrating..." : "Running");
+		}
+
+		const max = state.maxDataPoints;
+		const mergedChart =
+			appendedChart.length === 0
+				? state.chartData
+				: trimToMax([...state.chartData, ...appendedChart], max);
+		const mergedRaw =
+			appendedRaw.length === 0
+				? state.rawChartData
+				: trimToMax([...state.rawChartData, ...appendedRaw], max);
+
+		set({
+			status: nextStatus,
+			calibrationProgress: nextCalibrationProgress,
+			isCalibrating: nextIsCalibrating,
+			availableColumns: nextAvailableColumns,
+			selectedColumns: nextSelectedColumns,
+			chartData: mergedChart,
+			rawChartData: mergedRaw,
+			currentData: lastDataMessage ?? state.currentData,
+		});
 	},
 
 	setModels: (models: ModelMetadata[]) => {
