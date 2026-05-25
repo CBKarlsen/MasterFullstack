@@ -87,7 +87,7 @@ class CloggingDetector:
             sigma: Number of standard deviations for threshold calculation.
         """
         self.fs = fs
-        self.window_size = int(window_sec * fs)  # e.g., 200 samples
+        self.window_size = int(window_sec * fs)  # e.g., 600 samples at fs=20 Hz
         self.buffer = collections.deque(maxlen=self.window_size)
         self.composite_buffer_duration = 15.0
 
