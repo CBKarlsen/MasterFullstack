@@ -117,7 +117,7 @@ class SimulationEngine:
                         # browser and OOM-crashes the tab.
                         effective_hz = detected_fs * self.speed_multiplier
                         self.frame_skip_rate = max(1, int(effective_hz / TARGET_WIRE_HZ))
-                        # Size calibration buffer to fit ≥21 spectral windows at this fs.
+                        # Size calibration buffer to fit ≥60 spectral windows at this fs.
                         self._required_calibration_samples = (
                             CloggingDetector.required_calibration_samples(detected_fs)
                         )
