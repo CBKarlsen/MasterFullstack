@@ -197,8 +197,10 @@ class CloggingDetector:
         self.critical_threshold = self.sigma * self.baseline_std
 
         # Composite threshold: percentile-based (distribution-free).
-        # sigma maps to a one-tailed normal percentile so the UI knob stays intuitive:
-        #   sigma=2 → 97.7th pct,  sigma=3 → 99.9th pct,  sigma=4 → 99.997th pct
+        # sigma maps to a one-tailed normal percentile so the UI knob stays
+        # intuitive, capped at the 99.9th percentile (see _sigma_to_pct):
+        #   sigma=2 → 97.7th pct,  sigma>=3 → 99.9th pct (capped; ~60 calibration
+        #   windows cannot resolve finer tails)
         if len(self._sorted_composites) > 0:
             self.fft_threshold = float(np.percentile(self._sorted_composites, pct))
         elif self.baseline_composite_mean > 0:
