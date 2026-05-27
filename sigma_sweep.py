@@ -80,8 +80,10 @@ GROUND_TRUTH: dict[str, float | None] = {
     # 27.01.23 — blockage of orifice and loop at 7 Hz, event at 54:44
     "27-01-23-LF.xlsx":   54.733,
 
-    # 18.11.22 — loop blockage at 6 Hz, event at 6:50
-    "18-11-LF.xlsx":      6.833,
+    # 18.11.22 — loop blockage (pump at 6 Hz). Log timecode 13:40:14–13:50:30;
+    # blockage completes ~10 min into the recording. ("6 Hz" is the pump
+    # frequency, not a timestamp — earlier 6:50 reading was wrong.)
+    "18-11-LF.xlsx":      10.0,
 
     # 29.06.22 — 4 runs; blockage in runs 2/3/4 (run 1 = no blockage).
     # Run 1 evaluated separately as a no-block file (composite stays silent).
