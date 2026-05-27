@@ -67,6 +67,8 @@ def tally_per_sigma(rows: list[dict]) -> dict[int, dict[str, int]]:
     """Group rows by sigma and count outcome categories."""
     buckets: dict[int, dict[str, int]] = {s: {} for s in SIGMA_COLORS}
     for r in rows:
+        if r["sigma"] not in buckets:  # only the sigmas this figure plots (3, 4, 5)
+            continue
         cat = classify(r)
         buckets[r["sigma"]][cat] = buckets[r["sigma"]].get(cat, 0) + 1
     return buckets
@@ -79,12 +81,12 @@ def plot_outcome_bars(ax, counts: dict[int, dict[str, int]]) -> None:
     categories = ["true_positive", "false_positive", "missed",
                   "unknown_detected", "unknown_silent", "true_negative"]
     cat_labels = {
-        "true_positive":    "Korrekt deteksjon (kjent tilstopping)",
-        "false_positive":   "Falsk positiv (no-block)",
-        "missed":           "Mistet (kjent tilstopping)",
-        "unknown_detected": "Deteksjon (ukjent fasit)",
-        "unknown_silent":   "Ingen deteksjon (ukjent fasit)",
-        "true_negative":    "Korrekt stille (no-block)",
+        "true_positive":    "Correct detection (confirmed blockage)",
+        "false_positive":   "False positive (no-block)",
+        "missed":           "Missed (confirmed blockage)",
+        "unknown_detected": "Detection (unknown ground truth)",
+        "unknown_silent":   "No detection (unknown ground truth)",
+        "true_negative":    "Correctly silent (no-block)",
     }
     cat_colors = {
         "true_positive":    "#16a34a",
@@ -103,8 +105,8 @@ def plot_outcome_bars(ax, counts: dict[int, dict[str, int]]) -> None:
         bottoms += vals
     ax.set_xticks(sigmas)
     ax.set_xlabel("Sigma (σ)")
-    ax.set_ylabel("Antall filer")
-    ax.set_title("A. Deteksjonsutfall per σ (kompositt)")
+    ax.set_ylabel("Number of files")
+    ax.set_title("A. Detection outcomes per σ (Composite)")
     ax.legend(fontsize=8, loc="upper right", framealpha=0.9)
 
 
@@ -122,8 +124,8 @@ def plot_lead_times(ax, rows: list[dict]) -> None:
     ax.axhline(0, color="#64748b", linestyle="--", linewidth=1)
     ax.set_xticks(sorted(SIGMA_COLORS))
     ax.set_xlabel("Sigma (σ)")
-    ax.set_ylabel("Forvarsel (min)  —  positiv = tidlig deteksjon")
-    ax.set_title("B. Forvarseltid på bekreftede tilstoppinger")
+    ax.set_ylabel("Lead time (min); positive = early detection")
+    ax.set_title("B. Lead time on confirmed blockages")
     ax.legend(fontsize=9, loc="best", framealpha=0.9)
     ax.grid(True, alpha=0.3)
 
@@ -132,7 +134,7 @@ def plot_crossing_histogram(ax, rows: list[dict]) -> None:
     """Panel C — histogram of composite crossing times, per sigma."""
     all_crosses = [r["composite_cross"] for r in rows if r["composite_cross"] is not None]
     if not all_crosses:
-        ax.text(0.5, 0.5, "Ingen deteksjoner", transform=ax.transAxes, ha="center")
+        ax.text(0.5, 0.5, "No detections", transform=ax.transAxes, ha="center")
         return
     bins = np.linspace(0, max(all_crosses) * 1.05, 25)
     for sigma in sorted(SIGMA_COLORS):
@@ -140,9 +142,9 @@ def plot_crossing_histogram(ax, rows: list[dict]) -> None:
                    if r["sigma"] == sigma and r["composite_cross"] is not None]
         ax.hist(crosses, bins=bins, alpha=0.55, color=SIGMA_COLORS[sigma],
                 label=f"σ={sigma}  (n={len(crosses)})", edgecolor="white", linewidth=0.6)
-    ax.set_xlabel("Deteksjonstid (min fra filstart)")
-    ax.set_ylabel("Antall filer")
-    ax.set_title("C. Fordeling av deteksjonstider")
+    ax.set_xlabel("Detection time (min from file start)")
+    ax.set_ylabel("Number of files")
+    ax.set_title("C. Distribution of detection times")
     ax.legend(fontsize=9, loc="upper right", framealpha=0.9)
     ax.grid(True, alpha=0.3)
 
@@ -184,7 +186,7 @@ def main() -> None:
     plot_outcome_bars(axes[0], counts)
     plot_lead_times(axes[1], rows)
     plot_crossing_histogram(axes[2], rows)
-    fig.suptitle(f"Sigma-sammenligning  ({len(rows)} rader fra {CSV_PATH.name})",
+    fig.suptitle(f"Sigma comparison  ({len(rows)} rows from {CSV_PATH.name})",
                  fontsize=13, y=1.02)
     fig.tight_layout()
     fig.savefig(OUT_PATH, dpi=200, bbox_inches="tight")
