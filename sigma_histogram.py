@@ -189,7 +189,7 @@ def main() -> None:
     fig.suptitle(f"Sigma comparison  ({len(rows)} rows from {CSV_PATH.name})",
                  fontsize=13, y=1.02)
     fig.tight_layout()
-    fig.savefig(OUT_PATH, dpi=200, bbox_inches="tight")
+    fig.savefig(OUT_PATH, dpi=300, bbox_inches="tight")
     print(f"Figure written: {OUT_PATH}")
 
     print_summary(counts, rows)

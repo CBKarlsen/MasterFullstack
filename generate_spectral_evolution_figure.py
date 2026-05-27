@@ -40,10 +40,12 @@ OUT_SNAPSHOTS    = Path("fig_spectral_snapshots_exp2.png")
 # ── Thesis plot style ──────────────────────────────────────────────────────────
 plt.rcParams.update({
     "font.family":        "serif",
+    "mathtext.fontset":   "cm",
     "font.size":          10,
     "axes.spines.top":    False,
     "axes.spines.right":  False,
-    "figure.dpi":         150,
+    "figure.dpi":         300,
+    "savefig.dpi":        300,
 })
 
 BLUE   = "#2563EB"
@@ -249,7 +251,7 @@ for t, col in [
     if t is not None:
         ax_comp.axvline(t, color=col, lw=1.2, ls="--", alpha=0.8)
 
-fig1.savefig(OUT_SPECTROGRAM, bbox_inches="tight", dpi=150)
+fig1.savefig(OUT_SPECTROGRAM, bbox_inches="tight", dpi=300)
 plt.close(fig1)
 print(f"  Saved {OUT_SPECTROGRAM}")
 
@@ -301,7 +303,7 @@ fig2.suptitle(
     fontsize=10,
 )
 
-fig2.savefig(OUT_SNAPSHOTS, bbox_inches="tight", dpi=150)
+fig2.savefig(OUT_SNAPSHOTS, bbox_inches="tight", dpi=300)
 plt.close(fig2)
 print(f"  Saved {OUT_SNAPSHOTS}")
 print("Done.")

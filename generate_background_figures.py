@@ -29,12 +29,16 @@ from app.dataloader import DataStreamer
 from app.engine import detect_sampling_rate
 
 # ── Style ──────────────────────────────────────────────────────────────────────
+# Shared thesis figure style: serif to match the LaTeX body, clean spines,
+# and a single export resolution so every figure prints crisply at 300 DPI.
 plt.rcParams.update({
     "font.family": "serif",
+    "mathtext.fontset": "cm",
     "font.size": 11,
     "axes.spines.top": False,
     "axes.spines.right": False,
-    "figure.dpi": 150,
+    "figure.dpi": 300,
+    "savefig.dpi": 300,
 })
 
 BLUE   = "#2563EB"
