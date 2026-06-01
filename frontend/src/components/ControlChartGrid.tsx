@@ -1,3 +1,16 @@
+/**
+ * ControlChartGrid — lays out a stack of ControlChart panels for the live view.
+ *
+ * Renders two sections: (A) raw sensor columns (e.g. live flow rate) selected by
+ * the user, and (B) anomaly-detection score series (STATIC and COMPOSITE),
+ * each drawn as a control chart with its threshold/control-limit line. Consumes
+ * `rawData` (raw sensor samples) and `chartData` (per-sample detection scores),
+ * both downsampled to the last `maxDataPoints` points. Thresholds are resolved
+ * with a precedence of backend-supplied value > explicit prop > built-in default;
+ * sensor columns with no supplied threshold fall back to a dynamic mean+kσ limit
+ * computed locally. Also exposes the sigma-selector buttons that let the user
+ * change the global detection threshold via `onSigmaChange`.
+ */
 import { useMemo } from "react";
 import type { ChartDataPoint, RawDataPoint } from "../types";
 import { ControlChart, type ControlChartDataPoint } from "./ControlChart";
@@ -48,6 +61,7 @@ const SIGMA_OPTIONS = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
 
 const COLUMN_COLORS = ["#0000FF", "#0288d1", "#0097a7"];
 
+// Infer the display unit for a raw sensor column from its name.
 const getColumnUnit = (column: string): string => {
 	const lower = column.toLowerCase();
 	if (lower.includes("flow")) return "L/s";
@@ -55,6 +69,8 @@ const getColumnUnit = (column: string): string => {
 	return "";
 };
 
+// Fallback control limit for sensor columns: mean + multiplier·stddev of the
+// supplied values (a kσ upper control limit), used when no threshold is given.
 function calculateDynamicThreshold(
 	values: number[],
 	multiplier: number = 5,
@@ -141,7 +157,9 @@ export function ControlChartGrid({
 		defaultColumnThreshold,
 	]);
 
-	// Extract latest thresholds from chartData (sent by backend every frame)
+	// Extract the most recent per-method thresholds and active sigma from the
+	// last chartData frame (the backend embeds these on every sample); falls
+	// back to defaults when no data has arrived yet.
 	const latestThresholds = useMemo(() => {
 		if (limitedChartData.length === 0)
 			return { static: 0.018, composite: 0.05, sigma: 3.0 };

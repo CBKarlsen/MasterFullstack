@@ -1,3 +1,16 @@
+/**
+ * ProbabilityChart — time series of ML clogging probabilities (0–100%).
+ *
+ * Plots the ensemble clogging probability as a filled area, with each enabled
+ * individual model's probability overlaid as a dashed line so the ensemble
+ * stands out. The background is banded into green (0–20%), amber (20–70%), and
+ * red (70–100%) zones matching the traffic-light risk levels. Consumes
+ * `data` (per-sample probabilities keyed by model name, plus `ensemble`) and
+ * `models` metadata (used to pick which dashed lines to draw and to assign
+ * colors). Shows a calibration progress state while the baseline is being
+ * established and a "waiting for data" placeholder until valid ensemble values
+ * arrive.
+ */
 import {
 	Area,
 	CartesianGrid,
@@ -28,6 +41,8 @@ const MODEL_COLORS: Record<string, string> = {
 	xgboost: "#14b8a6",
 };
 
+// Resolve a line color for a model: use the fixed palette if known, else
+// derive a distinct hue via the golden-angle (137°) spacing on the color wheel.
 const getModelColor = (name: string, index: number): string => {
 	if (MODEL_COLORS[name]) return MODEL_COLORS[name];
 	const hue = (index * 137) % 360;

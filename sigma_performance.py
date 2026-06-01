@@ -1,6 +1,20 @@
 """
-Sigma performance chart — lead time vs sigma value.
-Run: python3 sigma_performance.py
+Sigma performance chart — detection lead time as a function of the sigma threshold.
+
+Produces a thesis figure (Norwegian labels) comparing how much advance warning each
+detection method gives at sigma = 3, 4, 5, for the two clean experiments:
+  * Experiment 1 — partial clogging (the composite/FFT method's headline result)
+  * Experiment 2 — full clogging
+
+The plotted numbers are NOT recomputed here — they are the summarised detection
+lead times (minutes before the ground-truth clogging time) taken from the sigma
+sweep runs (see sigma_sweep.py / sigma_sweep_results.csv and the results document).
+Each point is the lead time in minutes; an "x" on the axis means the method never
+detected at that sigma, and points flagged ``premature`` (the composite σ=3 case
+on Experiment 1, which fired ~56 min early) are effectively false alarms and are
+drawn in red.
+
+Run:    python3 sigma_performance.py
 Output: sigma_performance.png
 """
 

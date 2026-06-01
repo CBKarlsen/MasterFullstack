@@ -1,6 +1,24 @@
+/**
+ * useWebSocket — manages the live connection to the backend simulation stream.
+ *
+ * Opens a WebSocket to the simulation endpoint, sends the start/stop control
+ * messages, and surfaces connection status and the most recent frame to the
+ * UI. The backend pushes detection frames at roughly 20 Hz (and faster under
+ * the speed multiplier), so each incoming message is pushed into a buffer and
+ * the buffer is flushed once per `requestAnimationFrame` (~60 Hz cap). This
+ * decouples the wire rate from React renders: instead of one store write per
+ * message, consumers receive a single batched callback (`onBatch`) per frame.
+ *
+ * Inputs: the WebSocket `url` plus optional `onMessage` / `onBatch` handlers
+ * (kept in refs so the long-lived socket callbacks never read stale closures).
+ * Outputs: `isConnected`, `lastMessage` (latest frame only), `error`, and the
+ * `startSimulation` / `stopSimulation` controls. The buffer is capped at
+ * MAX_BUFFERED_MESSAGES so a slow renderer at high speed cannot exhaust memory.
+ */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SimulationConfig, SimulationData } from "../types";
 
+// Hard cap on the unflushed buffer; older messages are dropped past this.
 const MAX_BUFFERED_MESSAGES = 500;
 
 interface UseWebSocketOptions {
@@ -59,7 +77,9 @@ export function useWebSocket(
 					onMessageRef.current(msg);
 				}
 			}
-			// Only update React state with the latest message
+			// Only the newest frame goes into React state; the full batch was
+			// already handed to the consumer above, so re-rendering on every
+			// buffered message would be wasted work.
 			setLastMessage(buf[buf.length - 1]);
 		});
 	}, []);
@@ -108,6 +128,8 @@ export function useWebSocket(
 						// Cap the buffer so a slow renderer can't OOM the tab at high speeds.
 						bufferRef.current.push(data);
 						if (bufferRef.current.length > MAX_BUFFERED_MESSAGES) {
+							// Drop the oldest overflow so only the most recent
+							// MAX_BUFFERED_MESSAGES frames survive until the next flush.
 							bufferRef.current.splice(
 								0,
 								bufferRef.current.length - MAX_BUFFERED_MESSAGES,

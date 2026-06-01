@@ -1,3 +1,22 @@
+/**
+ * RFTrainingPanel — in-card training UI for the built-in Random Forest model.
+ *
+ * Renders inside the Random Forest model card. The Random Forest is the SUPERVISED
+ * member of the ensemble: training expects a data file/folder covering both a healthy
+ * period and a clogging event, and the backend auto-labels each moment as
+ * healthy-vs-clogged. The user picks a file, a sigma threshold, a calibration window,
+ * and RF hyperparameters (n_estimators, max_depth) before launching training.
+ *
+ * Backend endpoints: GET /api/data (file list), GET .../random_forest/training-info
+ * (current source + stats), POST .../random_forest/train?... (start, fire-and-forget
+ * into a backend thread), GET .../random_forest/training-progress (polled while
+ * training), POST .../random_forest/reset (revert to the default synthetic model).
+ *
+ * Progress model: train() only kicks off a background thread; the panel then polls
+ * the progress endpoint every 600 ms and stops the interval once the phase reaches
+ * "complete" (capturing the result) or "error". Transient poll failures are ignored
+ * so a single dropped request does not abort the run.
+ */
 import axios from "axios";
 import { useEffect, useRef, useState } from "react";
 import type { DataFile } from "../types";
@@ -43,8 +62,10 @@ interface TrainingInfo {
 // Constants
 // ---------------------------------------------------------------------------
 
+// Selectable sigma values; higher sigma = stricter clogged threshold = fewer alerts.
 const SIGMA_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8];
 
+// RF hyperparameter: number of trees, framed as a speed/accuracy trade-off.
 const N_ESTIMATORS_OPTIONS = [
 	{ label: "Fast (50 trees)", value: 50 },
 	{ label: "Balanced (100 trees)", value: 100 },
@@ -52,6 +73,7 @@ const N_ESTIMATORS_OPTIONS = [
 	{ label: "Very accurate (300 trees)", value: 300 },
 ];
 
+// RF hyperparameter: tree depth cap (null = unlimited), framed as model complexity.
 const MAX_DEPTH_OPTIONS = [
 	{ label: "Simple (depth 4)", value: 4 },
 	{ label: "Balanced (depth 8)", value: 8 },
@@ -59,6 +81,7 @@ const MAX_DEPTH_OPTIONS = [
 	{ label: "Unlimited", value: null },
 ];
 
+// Maps backend training-progress phase keys to user-facing status text.
 const PHASE_LABELS: Record<string, string> = {
 	starting: "Starting…",
 	analyzing: "Analyzing data…",
@@ -68,6 +91,7 @@ const PHASE_LABELS: Record<string, string> = {
 	error: "Failed",
 };
 
+// Friendly names for the 4 input features, used in the feature-importance readout.
 const FEATURE_LABELS: Record<string, string> = {
 	static_score: "Pressure deviation",
 	composite_score: "Frequency energy ratio",
@@ -98,8 +122,10 @@ export function RFTrainingPanel({ onTrainComplete }: RFTrainingPanelProps) {
 	const [error, setError] = useState<string | null>(null);
 	const [resetting, setResetting] = useState(false);
 	const [open, setOpen] = useState(false);
+	// Holds the active progress-polling interval so it can be cleared on completion.
 	const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+	// On mount, load the selectable data files and the model's current training source.
 	useEffect(() => {
 		axios
 			.get<DataFile[]>("/api/data")
@@ -111,6 +137,8 @@ export function RFTrainingPanel({ onTrainComplete }: RFTrainingPanelProps) {
 			.catch(() => {});
 	}, []);
 
+	// While a training run is active, poll the backend progress endpoint every 600 ms.
+	// The run executes in a backend thread, so this is the only way to observe it.
 	useEffect(() => {
 		if (!training) return;
 
@@ -122,6 +150,8 @@ export function RFTrainingPanel({ onTrainComplete }: RFTrainingPanelProps) {
 				const state = res.data;
 				setProgress(state);
 
+				// Terminal "complete" phase: stop polling, store the result, and refresh
+				// the training-info banner from the returned stats.
 				if (state.phase === "complete" && state.result) {
 					clearInterval(pollRef.current!);
 					setResult(state.result);
@@ -135,6 +165,7 @@ export function RFTrainingPanel({ onTrainComplete }: RFTrainingPanelProps) {
 					setTraining(false);
 					onTrainComplete();
 				} else if (state.phase === "error") {
+					// Terminal "error" phase: stop polling and surface the message.
 					clearInterval(pollRef.current!);
 					setError(state.error ?? "Training failed");
 					setTraining(false);
@@ -149,6 +180,8 @@ export function RFTrainingPanel({ onTrainComplete }: RFTrainingPanelProps) {
 		};
 	}, [training, selectedFile, onTrainComplete]);
 
+	// Starts a training run: flips into the training state (which arms the poller) and
+	// POSTs the chosen file/sigma/hyperparameters. The POST returns immediately.
 	const handleTrain = async () => {
 		if (!selectedFile) return;
 		setTraining(true);
@@ -163,6 +196,7 @@ export function RFTrainingPanel({ onTrainComplete }: RFTrainingPanelProps) {
 				calibration_seconds: String(calibrationSeconds),
 				include_warnings: String(includeWarnings),
 				n_estimators: String(nEstimators),
+				// max_depth is omitted entirely when "Unlimited" (null) is selected.
 				...(maxDepth !== null ? { max_depth: String(maxDepth) } : {}),
 			});
 			await axios.post(`/api/models/random_forest/train?${params}`);
@@ -179,6 +213,7 @@ export function RFTrainingPanel({ onTrainComplete }: RFTrainingPanelProps) {
 		}
 	};
 
+	// Discards the user-trained model and restores the default synthetic-data model.
 	const handleReset = async () => {
 		setResetting(true);
 		setError(null);
@@ -198,6 +233,7 @@ export function RFTrainingPanel({ onTrainComplete }: RFTrainingPanelProps) {
 		}
 	};
 
+	// Formats a 0–1 ratio as a percentage string.
 	const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
 
 	return (
@@ -217,6 +253,7 @@ export function RFTrainingPanel({ onTrainComplete }: RFTrainingPanelProps) {
 				}}
 			>
 				<div>
+					{/* Shows whether the model is on default synthetic data or user-trained. */}
 					<span style={{ fontSize: "13px", fontWeight: 600, color: "#374151" }}>
 						Training data:{" "}
 					</span>
@@ -601,6 +638,8 @@ export function RFTrainingPanel({ onTrainComplete }: RFTrainingPanelProps) {
 							cursor: "pointer",
 						}}
 					>
+						{/* When set, warning-phase samples are labelled clogged, enlarging the
+						    positive class at the cost of some label noise. */}
 						<input
 							type="checkbox"
 							checked={includeWarnings}
@@ -788,6 +827,8 @@ export function RFTrainingPanel({ onTrainComplete }: RFTrainingPanelProps) {
 									</div>
 								))}
 							</div>
+							{/* Feature-importance bars, sorted descending: which of the 4 inputs
+								    the trained Random Forest relies on most. */}
 							<div>
 								<div
 									style={{

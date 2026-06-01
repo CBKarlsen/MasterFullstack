@@ -1,3 +1,16 @@
+/**
+ * MLLivePanel — live readout of the ML ensemble's clogging probability.
+ *
+ * Shows the ensemble clogging probability as a large percentage with a colored
+ * gauge bar and a Healthy/Warning/Critical badge (thresholds at 20% and 70%),
+ * then breaks the result down into per-model "votes" with each model's
+ * probability bar, optional classification badge, and a 5-dot confidence
+ * indicator. Consumes the latest `SimulationData` frame (ensemble probability
+ * plus per-model predictions) and `models` metadata. The Active Models section
+ * lets the user enable/disable individual models, persisting the change via a
+ * PUT to the backend (`onToggle` updates local state optimistically). Renders a
+ * calibration progress state, a "no data" placeholder, and the live view.
+ */
 import axios from "axios";
 import { useState } from "react";
 import { COLOR } from "../styles/tokens";
@@ -14,6 +27,8 @@ interface MLLivePanelProps {
 	onToggle: (name: string, enabled: boolean) => void;
 }
 
+// Map a probability to its traffic-light color set and label
+// (Healthy < 0.2, Warning < 0.7, Critical otherwise).
 function probStyle(prob: number) {
 	if (prob < 0.2)
 		return {
@@ -46,6 +61,8 @@ export function MLLivePanel({
 }: MLLivePanelProps) {
 	const [toggling, setToggling] = useState<string | null>(null);
 
+	// Persist an enable/disable to the backend, then update local state; on
+	// failure the next poll re-syncs the UI so the toggle silently reverts.
 	const handleToggle = async (name: string, currentlyEnabled: boolean) => {
 		setToggling(name);
 		try {
@@ -292,6 +309,7 @@ export function MLLivePanel({
 							if (!pred) return null;
 							const c = probStyle(pred.probability);
 							const conf = pred.confidence ?? 0;
+							// Quantize confidence (0–1) into 0–5 filled dots.
 							const filledDots = Math.round(conf * 5);
 
 							return (

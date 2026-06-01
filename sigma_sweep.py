@@ -25,7 +25,6 @@ SUPPORTED_EXTENSIONS = {".xlsx", ".csv", ".xls"}
 # Each directory contributes one row per sigma, not one row per split file.
 EXPERIMENT_DIRS = {"Experiment1", "Experiment2 copy"}
 SKIP_FILES = {
-    "Book1.xlsx",              # empty
     "clogging results.xlsx",   # non-experiment
     "7-12.xlsx",               # unstable composite across sigmas; excluded from evaluation
     "2108-1.csv",              # 21.08 split 1 — discarded (mid-run spike removed by trimming)

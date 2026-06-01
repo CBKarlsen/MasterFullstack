@@ -1,3 +1,18 @@
+/**
+ * CloggingForecast — projects the composite score's future trajectory once an
+ * onset has been detected.
+ *
+ * Overlays the actual post-onset composite score against three fitted growth
+ * models (linear, exponential, power law) and marks two horizontal reference
+ * lines: the detection threshold and the critical level (a user-selected
+ * multiple of that threshold). For each model it shows an R² goodness-of-fit
+ * and an ETA to the critical crossing, highlighting the backend's chosen best
+ * fit and a consensus ETA (median across models). Consumes a precomputed
+ * `ForecastData` object (model fits, fitted curve points, thresholds, onset
+ * time) plus the raw `timeseries`; the multiplier dropdown re-requests the
+ * forecast via `onCriticalMultiplierChange`. The "Actual" series is downsampled
+ * to at most ACTUAL_DOWNSAMPLE_MAX points to keep the chart responsive.
+ */
 import { useMemo } from "react";
 import {
 	CartesianGrid,
@@ -42,6 +57,7 @@ const ACTUAL_DOWNSAMPLE_MAX = 300;
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
+// Format a duration in seconds as zero-padded HH:MM:SS.
 function formatHHMMSS(seconds: number): string {
 	const h = Math.floor(seconds / 3600);
 	const m = Math.floor((seconds % 3600) / 60);
@@ -49,14 +65,18 @@ function formatHHMMSS(seconds: number): string {
 	return [h, m, s].map((v) => String(v).padStart(2, "0")).join(":");
 }
 
+// Merge the downsampled actual composite series and the fitted model curves
+// into a single row-per-timestamp dataset that Recharts can render.
 function buildChartData(
 	timeseries: AnalysisPoint[],
 	onsetTime: number,
 	curveData: Record<string, Array<{ time: number; value: number }>>,
 ): Record<string, number | undefined>[] {
+	// Keep only post-onset analysis-phase samples — the forecast region.
 	const postOnset = timeseries.filter(
 		(p) => p.phase === "analysis" && p.time >= onsetTime,
 	);
+	// Downsample by taking every `step`-th point to cap at ACTUAL_DOWNSAMPLE_MAX.
 	const step = Math.max(
 		1,
 		Math.floor(postOnset.length / ACTUAL_DOWNSAMPLE_MAX),
@@ -70,6 +90,8 @@ function buildChartData(
 			new Map(pts.map((p) => [p.time, p.value])),
 		]),
 	);
+	// Union of all timestamps across the actual series and every model curve,
+	// so each rendered row can carry whichever series have a value at that time.
 	const allTimes = Array.from(
 		new Set([
 			...sampled.map((p) => p.time),
@@ -95,6 +117,8 @@ interface ModelFitCardProps {
 	criticalMultiplier: number;
 }
 
+// Summary card for one fitted growth model: color swatch, R² (green/amber/red
+// by quality), and ETA to the critical threshold (or "No crossing").
 function ModelFitCard({
 	name,
 	fit,

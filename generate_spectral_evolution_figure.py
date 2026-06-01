@@ -206,22 +206,30 @@ fig1, (ax_spec, ax_comp) = plt.subplots(
 )
 
 # — Spectrogram panel —
+# Show each frequency bin's deviation from its calibration-period baseline, so the
+# spectral shape change the Composite Method detects is visible rather than being
+# swamped by the broadband power rise at the blockage.
 log_spec = np.log10(spec_matrix + 1e-12)
-vmin, vmax = np.percentile(log_spec, [2, 98])
+calib_cols = spec_times_min < calib_end_min
+baseline_col = (log_spec[:, calib_cols].mean(axis=1, keepdims=True)
+                if calib_cols.any() else log_spec.mean(axis=1, keepdims=True))
+dev_spec = log_spec - baseline_col
+lim = float(np.percentile(np.abs(dev_spec), 98))
 im = ax_spec.pcolormesh(
-    spec_times_min, freqs, log_spec,
+    spec_times_min, freqs, dev_spec,
     shading="auto",
-    cmap="viridis",
-    vmin=vmin, vmax=vmax,
+    cmap="RdBu_r",
+    vmin=-lim, vmax=lim,
 )
 cbar = fig1.colorbar(im, ax=ax_spec, pad=0.01, fraction=0.025)
-cbar.set_label("log$_{10}$ power", fontsize=9)
+cbar.set_label("log$_{10}$ power\n(deviation from baseline)", fontsize=9)
 
 ax_spec.set_ylabel("Frequency (Hz)")
 ax_spec.set_xlim(0, times_min[-1])
 ax_spec.set_title("STFT Spectrogram — Experiment 2 ($f_s$ = 20 Hz)", fontsize=11)
 
-# Annotation lines
+# Annotation lines (labels near the right edge flip to the inner side so they
+# do not run under the colorbar)
 for t, lbl, col in [
     (calib_end_min,              "Calibration\nend",      GRAY),
     (sustained_crossing_min,     "Composite\nalarm",       ORANGE),
@@ -229,8 +237,10 @@ for t, lbl, col in [
 ]:
     if t is not None:
         ax_spec.axvline(t, color=col, lw=1.4, ls="--", alpha=0.85)
-        ax_spec.text(t + 1.0, freqs[-1] * 0.92, lbl, color=col,
-                     fontsize=8, va="top", ha="left")
+        near_right = t > 0.8 * times_min[-1]
+        ax_spec.text(t + (-1.5 if near_right else 1.0), freqs[-1] * 0.92, lbl,
+                     color=col, fontsize=8, va="top",
+                     ha="right" if near_right else "left")
 
 # — Composite score panel —
 ax_comp.plot(composite_times, composite_scores, color=PURPLE, lw=0.6, alpha=0.4, label="Composite score $d_m$ (raw)")
@@ -240,7 +250,7 @@ ax_comp.axhline(fft_threshold, color=ORANGE, lw=1.3, ls="--",
 ax_comp.set_xlabel("Time (min)")
 ax_comp.set_ylabel("$d_m$")
 ax_comp.set_xlim(0, times_min[-1])
-ax_comp.set_ylim(bottom=0)
+ax_comp.set_yscale("log")  # reveal the sustained above-threshold elevation a linear axis hides
 ax_comp.legend(fontsize=9, loc="upper left")
 
 for t, col in [

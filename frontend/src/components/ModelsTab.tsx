@@ -1,3 +1,18 @@
+/**
+ * ModelsTab — the "Models" tab of the detection platform.
+ *
+ * Renders the model-management view: a card per registered ML model showing its
+ * type, runtime stats, enable/disable toggle, and a per-model "trust" weight that
+ * scales the model's contribution to the weighted ensemble clogging score. The two
+ * built-in models (Random Forest, Isolation Forest) additionally embed their own
+ * training panels.
+ *
+ * Backend endpoints: GET /api/models (list, polled every 5 s), PUT
+ * /api/models/:name/enable?enabled= (toggle), PUT /api/models/:name/weight?weight=
+ * (trust weight). Weight changes are applied optimistically to the store and the
+ * PUT is debounced by 300 ms per model so dragging the slider does not flood the
+ * backend. Model state lives in the shared Zustand simulationStore, not local state.
+ */
 import axios from "axios";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSimulationStore } from "../store/simulationStore";
@@ -9,6 +24,7 @@ import { RFTrainingPanel } from "./RFTrainingPanel";
 // Helpers
 // ---------------------------------------------------------------------------
 
+// Maps a numeric trust weight (0–2) to a human-readable influence label.
 function weightLabel(w: number): string {
 	if (w <= 0.1) return "Muted — not contributing";
 	if (w <= 0.4) return "Low influence";
@@ -19,6 +35,7 @@ function weightLabel(w: number): string {
 	return "Maximum influence";
 }
 
+// Maps a trust weight to a colour cue for the slider/label (grey→blue→green→amber→red).
 function weightColor(w: number): string {
 	if (w <= 0.1) return "#9ca3af";
 	if (w <= 0.8) return "#3b82f6";
@@ -54,6 +71,8 @@ interface ModelCardProps {
 	onTrainComplete: () => void;
 }
 
+// One card per model: header/type badge, runtime stats, enable toggle, trust-weight
+// slider, and (for the two built-in models) the embedded training panel.
 function ModelManagementCard({
 	model,
 	onToggle,
@@ -61,6 +80,7 @@ function ModelManagementCard({
 	onTrainComplete,
 }: ModelCardProps) {
 	const [toggling, setToggling] = useState(false);
+	// Default to a neutral 1.0 weight when the backend has not recorded one.
 	const weight = model.weight ?? 1.0;
 
 	const handleToggle = async () => {
@@ -261,6 +281,7 @@ function ModelManagementCard({
 					<span style={{ fontSize: "11px", color: "#9ca3af", width: "28px" }}>
 						Low
 					</span>
+					{/* Trust-weight slider (0–2); disabled models cannot be reweighted. */}
 					<input
 						type="range"
 						min={0}
@@ -294,6 +315,7 @@ function ModelManagementCard({
 				</p>
 			</div>
 
+			{/* Only the two built-in models expose an in-card training panel. */}
 			{model.name === "Random Forest" && (
 				<RFTrainingPanel onTrainComplete={onTrainComplete} />
 			)}
@@ -308,11 +330,14 @@ function ModelManagementCard({
 // Main ModelsTab
 // ---------------------------------------------------------------------------
 
+// Top-level tab component: loads the model list, polls it, and wires up the
+// toggle/weight handlers shared by every ModelManagementCard.
 export function ModelsTab() {
 	const { models, setModels, toggleModel, updateModelWeight } =
 		useSimulationStore();
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	// Per-model debounce timers so rapid slider movements coalesce into one PUT.
 	const debounceRefs = useRef<Record<string, ReturnType<typeof setTimeout>>>(
 		{},
 	);
@@ -330,6 +355,7 @@ export function ModelsTab() {
 		}
 	}, [setModels]);
 
+	// Fetch on mount, then re-poll every 5 s to keep stats/training state fresh.
 	useEffect(() => {
 		fetchModels();
 		const interval = setInterval(fetchModels, 5000);
@@ -352,6 +378,8 @@ export function ModelsTab() {
 
 	const handleWeightChange = useCallback(
 		(name: string, weight: number) => {
+			// Update the store immediately for a responsive slider, then debounce the
+			// backend PUT (300 ms) so only the final value is persisted.
 			updateModelWeight(name, weight);
 			clearTimeout(debounceRefs.current[name]);
 			debounceRefs.current[name] = setTimeout(async () => {

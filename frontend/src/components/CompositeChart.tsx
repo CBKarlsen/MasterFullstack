@@ -1,3 +1,16 @@
+/**
+ * CompositeChart — live control chart for the composite detection score.
+ *
+ * Plots the per-sample composite score (L1 distance between the current FFT
+ * power spectrum and the calibrated healthy fingerprint) against its sigma
+ * threshold, rendered as an auto-scrolling area chart. Each new prop-driven
+ * data point is appended to an internal ring buffer capped at `maxDataPoints`.
+ * The Y-axis uses a logarithmic scale because composite scores span several
+ * orders of magnitude; zero scores are clamped to LOG_SAFE_MIN so they remain
+ * plottable. When the latest score exceeds its threshold ("sigma breach") the
+ * chart switches to a red color scheme, draws the threshold reference line, and
+ * shows a pulsing badge. Consumes a single `CompositeDataPoint` per frame.
+ */
 import { useMemo, useState } from "react";
 import {
 	Area,
@@ -57,8 +70,10 @@ export function CompositeChart({
 	if (data && lastSeenTime !== data.time) {
 		setLastSeenTime(data.time);
 
+		// Clamp non-positive scores to LOG_SAFE_MIN so they stay plottable on a log axis.
 		const safeScore =
 			data.composite_score > 0 ? data.composite_score : LOG_SAFE_MIN;
+		// Breach = raw score crosses the backend's sigma threshold for this frame.
 		const isBreach = data.composite_score > data.limit_threshold;
 
 		setBuffer((prev) => {
@@ -122,7 +137,8 @@ export function CompositeChart({
 
 		const maxVal = Math.max(...allValues);
 
-		// Use fixed minimum for log safety, dynamic maximum with padding
+		// Fixed lower bound for log safety; upper bound doubles the largest
+		// value (score or threshold) for headroom, with a floor of 1.
 		return [LOG_SAFE_MIN, Math.max(maxVal * 2, 1)];
 	}, [buffer]);
 

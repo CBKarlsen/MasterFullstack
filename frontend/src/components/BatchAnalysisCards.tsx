@@ -1,3 +1,17 @@
+/**
+ * BatchAnalysisCards — presentational building blocks for the BATCH-mode results view.
+ *
+ * This module groups the small, reusable result cards and the ML results panel that
+ * BatchAnalysis composes after a file has been analysed. It exports the shared
+ * `AnalysisPoint` type (one scored sample, carrying the four detector scores, the
+ * traffic-light state, the ML ensemble probability and optional per-model
+ * predictions, plus its calibration/analysis `phase`), the simple display cards
+ * (`SummaryCard`, `CrossingCard`, `MLStatCard`), and `BatchMLSection`, which renders
+ * the signal-state distribution bar, aggregate ML stat cards, a per-model breakdown
+ * (highlighting models that are still untrained/"dormant"), and a probability-over-time
+ * chart. These components are purely presentational — all scoring, phase splitting and
+ * threshold logic live in BatchAnalysis and the backend; here data only arrives as props.
+ */
 import { useMemo } from "react";
 import {
 	Area,
@@ -59,6 +73,7 @@ export type MLChartPoint = Record<string, number>;
 // Helpers
 // ---------------------------------------------------------------------------
 
+// Format a seconds value as a zero-padded HH:MM:SS string.
 function formatHHMMSS(seconds: number): string {
 	const h = Math.floor(seconds / 3600);
 	const m = Math.floor((seconds % 3600) / 60);
@@ -73,6 +88,7 @@ const MODEL_COLORS: Record<string, string> = {
 };
 const FALLBACK_COLORS = ["#8b5cf6", "#ec4899", "#06b6d4", "#f97316"];
 
+// Resolve a stable colour for a model: fixed colour by name, else a fallback by index.
 function modelColor(name: string, idx: number): string {
 	return MODEL_COLORS[name] ?? FALLBACK_COLORS[idx % FALLBACK_COLORS.length];
 }
@@ -87,6 +103,7 @@ interface SummaryCardProps {
 	highlight?: boolean;
 }
 
+// Single label/value metric tile for the top summary bar; `highlight` styles it red.
 export function SummaryCard({
 	label,
 	value,
@@ -129,6 +146,7 @@ interface CrossingCardProps {
 	color: string;
 }
 
+// Shows a single threshold-crossing time (or "No crossing") with its threshold value.
 export function CrossingCard({
 	label,
 	time,
@@ -178,6 +196,7 @@ interface MLStatCardProps {
 	highlight?: boolean;
 }
 
+// Compact label/value tile used for aggregate ML statistics.
 export function MLStatCard({
 	label,
 	value,
@@ -224,6 +243,10 @@ interface BatchMLSectionProps {
 const CRITICAL_PROBABILITY_THRESHOLD = 0.7;
 const DORMANT_MIN_POINTS = 10;
 
+// ML results panel: traffic-light distribution bar, aggregate ML stat cards, a
+// per-model breakdown, and the probability-over-time chart. A model is treated as
+// "dormant" (untrained) when it never produced a non-zero probability across a
+// sufficiently long run, and is then shown as awaiting training and hidden from the chart.
 export function BatchMLSection({
 	trafficDist,
 	mlStats,
@@ -233,6 +256,8 @@ export function BatchMLSection({
 }: BatchMLSectionProps) {
 	const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
 
+	// Per model: peak probability, first time it crossed the critical level, and a
+	// dormant flag (no signal at all over a long enough run ⇒ model not yet trained).
 	const perModelStats = useMemo(() => {
 		const pts = timeseries.filter((p) => p.phase === "analysis" && p.models);
 		return modelNames.map((name, idx) => {

@@ -1,3 +1,25 @@
+/**
+ * Dashboard — the top-level screen of the pipe-clogging detection platform.
+ *
+ * Renders the application shell (header, mode tabs, status pill, Start/Stop
+ * control) and lays out the live monitoring view: traffic light, ensemble
+ * clogging probability, per-method metric boxes (spectral slope, static and
+ * composite scores), the probability/raw-data/control charts, the live ETA
+ * forecast panel, and the right-hand sidebar (file/column selectors, model
+ * upload, ML live panel).
+ *
+ * The component owns only UI-local state (selected file, playback speed, and
+ * the active mode tab: "realtime" | "batch" | "models"). All streamed sensor
+ * and detection state lives in the Zustand `simulationStore`. It opens the
+ * backend WebSocket via `useWebSocket` and wires the hook's batched-message
+ * callback straight to the store's `updateDataBatch` action, so incoming
+ * frames flow WebSocket -> store -> charts without passing through this
+ * component's render.
+ *
+ * Note: the WebSocket connects directly to the backend in dev (bypassing
+ * Vite's proxy, which drops WS connections); in production a relative path is
+ * used so it rides the same origin.
+ */
 import axios from "axios";
 import { useCallback, useEffect, useState } from "react";
 import { useWebSocket } from "../hooks/useWebSocket";
@@ -54,6 +76,8 @@ export function Dashboard() {
 		? "ws://localhost:8000/ws/simulate"
 		: "/ws/simulate";
 
+	// Passing `onBatch` (rather than a per-message handler) lets the hook hand
+	// off a whole animation-frame's worth of samples in a single store write.
 	const { isConnected, startSimulation, stopSimulation, error } = useWebSocket(
 		wsUrl,
 		{ onBatch: updateDataBatch },
@@ -78,6 +102,7 @@ export function Dashboard() {
 			alert("Please select a data file first");
 			return;
 		}
+		// Reset store buffers before a new run so stale chart history is dropped.
 		clearData();
 		startSimulation(selectedFile, speed);
 	};
@@ -147,6 +172,8 @@ export function Dashboard() {
 						<label style={{ fontSize: FONT_SIZE.BASE, color: COLOR.GRAY_500 }}>
 							Speed:
 						</label>
+						{/* Playback speed multiplier for the simulated stream; locked
+						    while a run is in progress (cannot change mid-stream). */}
 						<select
 							value={speed}
 							onChange={(e) => setSpeed(Number(e.target.value))}
@@ -206,7 +233,9 @@ export function Dashboard() {
 			{/* Models tab — full-width, no sidebar */}
 			{mode === "models" && <ModelsTab />}
 
-			{/* Main Grid — realtime + batch only */}
+			{/* Main Grid — realtime + batch only. Kept mounted (display:none)
+			    rather than unmounted in models mode so its state survives a tab
+			    switch; the left column then forks on realtime vs. batch. */}
 			<div
 				style={{
 					display: mode === "models" ? "none" : "grid",
@@ -241,6 +270,8 @@ export function Dashboard() {
 									/>
 									<div style={{ textAlign: "right" }}>
 										<div style={{ fontSize: "32px", fontWeight: "bold" }}>
+											{/* Ensemble clogging probability (0–1) shown as a percent;
+											    em-dash until the first post-calibration sample arrives. */}
 											{currentData?.ensemble_probability !== undefined
 												? `${(currentData.ensemble_probability * 100).toFixed(1)}%`
 												: "—"}

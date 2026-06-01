@@ -12,6 +12,7 @@ Also prints a per-sigma summary table to stdout.
 """
 
 import csv
+import sys
 from pathlib import Path
 
 import matplotlib
@@ -38,9 +39,9 @@ def _to_float(v: str) -> float | None:
         return None
 
 
-def load_rows() -> list[dict]:
+def load_rows(csv_path: Path = CSV_PATH) -> list[dict]:
     """Load CSV rows, skipping error rows."""
-    with CSV_PATH.open() as fh:
+    with csv_path.open() as fh:
         rows = [r for r in csv.DictReader(fh) if not r.get("error", "").strip()]
     for r in rows:
         r["sigma"] = int(float(r["sigma"]))
@@ -100,8 +101,11 @@ def plot_outcome_bars(ax, counts: dict[int, dict[str, int]]) -> None:
     bottoms = np.zeros(len(sigmas))
     for cat in categories:
         vals = np.array([counts[s].get(cat, 0) for s in sigmas])
+        # Only label categories that occur in this corpus, so the legend does
+        # not advertise always-empty classes (e.g. unknown ground truth).
+        label = cat_labels[cat] if vals.sum() > 0 else None
         ax.bar(sigmas, vals, bottom=bottoms, color=cat_colors[cat],
-               label=cat_labels[cat], edgecolor="white", linewidth=0.5)
+               label=label, edgecolor="white", linewidth=0.5)
         bottoms += vals
     ax.set_xticks(sigmas)
     ax.set_xlabel("Sigma (σ)")
@@ -179,18 +183,22 @@ def print_summary(counts: dict[int, dict[str, int]], rows: list[dict]) -> None:
 # ── Entrypoint ─────────────────────────────────────────────────────────────
 
 def main() -> None:
-    rows = load_rows()
+    # Optional CSV argument; output name is derived from it
+    # (e.g. sigma_sweep_results_30s.csv -> sigma_histogram_30s.png).
+    csv_path = Path(sys.argv[1]) if len(sys.argv) > 1 else CSV_PATH
+    out_path = csv_path.with_name(
+        csv_path.stem.replace("sweep_results", "histogram") + ".png")
+
+    rows = load_rows(csv_path)
     counts = tally_per_sigma(rows)
 
     fig, axes = plt.subplots(1, 3, figsize=(18, 6), facecolor="white")
     plot_outcome_bars(axes[0], counts)
     plot_lead_times(axes[1], rows)
     plot_crossing_histogram(axes[2], rows)
-    fig.suptitle(f"Sigma comparison  ({len(rows)} rows from {CSV_PATH.name})",
-                 fontsize=13, y=1.02)
     fig.tight_layout()
-    fig.savefig(OUT_PATH, dpi=300, bbox_inches="tight")
-    print(f"Figure written: {OUT_PATH}")
+    fig.savefig(out_path, dpi=300, bbox_inches="tight")
+    print(f"Figure written: {out_path}")
 
     print_summary(counts, rows)
 

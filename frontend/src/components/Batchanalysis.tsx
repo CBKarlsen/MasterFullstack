@@ -1,3 +1,25 @@
+/**
+ * BatchAnalysis — top-level component for BATCH-mode (post-hoc whole-file) analysis.
+ *
+ * Lets the user pick a recorded data file, POST it to `/api/analyze`, and inspect
+ * the result. The backend splits the file into a calibration phase (learns the
+ * healthy baseline mean/std for pressure and the FFT composite spectrum) and an
+ * analysis phase (scores every window); each returned point carries a `phase` flag
+ * so the UI can treat the two phases differently. This component renders the
+ * controls (file already selected upstream, calibration length, sigma selector,
+ * smoothing window, critical multiplier), summary cards, the STATIC / COMPOSITE /
+ * flow control charts, the live clogging forecast, the sigma comparison, the ML
+ * results section, and a persistent analysis log.
+ *
+ * Key design decisions: (1) changing sigma or the smoothing window recomputes
+ * thresholds, crossings and the forecast entirely client-side — no extra server
+ * round-trip — because the per-sample scores are fixed and only the threshold
+ * lines move. (2) Threshold-crossing detection is asymmetric: the static crossing
+ * is the first raw sample above its threshold, while the composite crossing uses a
+ * rolling median over `smoothingWindowSec` to ignore transient spikes. (3) Each
+ * run is appended to a localStorage-backed log (sigma sweep results, predicted vs
+ * actual crossings) for later CSV export and error analysis.
+ */
 import axios from "axios";
 import { useCallback, useMemo, useState } from "react";
 import { computeForecast, type ForecastData } from "../utils/forecastClient";
@@ -74,6 +96,10 @@ interface ThresholdSet {
 	static_threshold: number;
 }
 
+// Locate the first threshold-crossing time for the static and composite methods.
+// Static: first raw sample above threshold. Composite: first time the rolling
+// median (over a `smoothingWindowSec` trailing window) exceeds threshold — this
+// suppresses transient spikes so a single noisy window does not trigger a crossing.
 function computeCrossings(
 	analysisPoints: AnalysisPoint[],
 	thresh: ThresholdSet,
@@ -90,6 +116,7 @@ function computeCrossings(
 	let compositeCrossing: number | null = null;
 	let wStart = 0;
 	for (let i = 0; i < analysisPoints.length; i++) {
+		// Advance the window start until [wStart, i] spans at most smoothingWindowSec
 		while (
 			analysisPoints[wStart].time <
 			analysisPoints[i].time - smoothingWindowSec
@@ -111,6 +138,7 @@ function computeCrossings(
 	return { static: staticCrossing, composite: compositeCrossing };
 }
 
+// Format a seconds value as HH:MM:SS, passing null through unchanged.
 function secToHHMMSS(seconds: number | null): string | null {
 	if (seconds === null) return null;
 	const h = Math.floor(seconds / 3600);
@@ -131,6 +159,10 @@ interface LogEntryInput {
 	actualCloggingTime: number | null;
 }
 
+// Assemble a single analysis-log row from a finished run: run parameters, the
+// detected crossings, forecast onset/ETA at sigma 3/4/5, best-fit model and peak
+// ML probability. Times are stored as HH:MM:SS strings; the file path is reduced
+// to its basename for display.
 function buildLogEntry(input: LogEntryInput): LogEntry {
 	const {
 		result,
@@ -187,6 +219,8 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
 	const [criticalMultiplier, setCriticalMultiplier] = useState(2.0);
 	const [logEntries, setLogEntries] = useState<LogEntry[]>(() => loadLog());
 
+	// Derive crossings, per-sigma forecasts, forecast and peak ML probability from a
+	// finished result, then append the assembled row to the persistent analysis log.
 	const logAnalysisResult = useCallback(
 		(
 			data: AnalysisResult,
@@ -217,6 +251,7 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
 			const peakMl = mlPoints.length
 				? Math.max(...mlPoints.map((p) => p.ensemble_probability))
 				: null;
+			// Ground-truth clogging time, if the user previously recorded one for this file
 			const actualCloggingTime =
 				loadStore()[data.metadata.file]?.actualCloggingTime ?? null;
 
@@ -244,6 +279,8 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
 		setError(null);
 
 		try {
+			// Only send calibration_seconds when the user overrides it; omitting it makes
+			// the backend use its dynamic per-fs sample count (matching real-time mode).
 			const calibParam =
 				calibrationSeconds > 0
 					? `&calibration_seconds=${calibrationSeconds}`
@@ -285,6 +322,9 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
 			setSigma(newSigma);
 			if (!result) return;
 
+			// Re-derive both thresholds from the (fixed) calibration statistics for the new
+			// sigma: composite = mean + σ·std (falling back to a multiplicative floor when
+			// std is zero); static = σ·baseline_std. No server call — only the lines move.
 			const { composite_mean, composite_std, baseline_std } =
 				result.calibration;
 			const newFft =
@@ -315,6 +355,8 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
 		const step = Math.max(1, Math.floor(points.length / maxDisplay));
 
 		// --- Pass 1: rolling mean over ALL analysis-phase points (full resolution) ---
+		// Computed before downsampling so the overlay reflects every sample, not just
+		// the displayed subset. Uses a sliding window sum keyed by timestamp.
 		const analysisPoints = points.filter((p) => p.phase === "analysis");
 		const rollingMeanByTime = new Map<number, number>();
 		let wStart = 0;
@@ -408,6 +450,7 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
 	]);
 
 	// ── ML analytics (analysis phase only) ────────────────────────────────────
+	// Fraction of analysis-phase samples in each traffic-light state (green/yellow/red)
 	const trafficDist = useMemo(() => {
 		if (!result) return null;
 		const pts = result.timeseries.filter((p) => p.phase === "analysis");
@@ -421,6 +464,8 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
 		};
 	}, [result]);
 
+	// Aggregate ML ensemble stats: peak probability, first time it reaches the
+	// critical level, and average probability over the red (clogged) samples.
 	const mlStats = useMemo(() => {
 		if (!result) return null;
 		const pts = result.timeseries.filter(
@@ -447,6 +492,8 @@ export function BatchAnalysis({ selectedFile }: BatchAnalysisProps) {
 		return Array.from(names);
 	}, [result]);
 
+	// Downsampled per-time series feeding the ML chart: ensemble probability plus
+	// one key per active model, flattened into chart-friendly records.
 	const mlChartData = useMemo(() => {
 		if (!result) return [];
 		const pts = result.timeseries.filter((p) => p.phase === "analysis");

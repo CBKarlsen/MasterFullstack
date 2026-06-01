@@ -1,3 +1,24 @@
+/**
+ * simulationStore — the Zustand store holding all live (and batch) streaming
+ * state for the dashboard.
+ *
+ * It receives decoded `SimulationData` frames from the WebSocket hook and
+ * fans them out into the shapes the charts consume: `currentData` (latest
+ * frame for the status card / metrics), `chartData` (per-time detection
+ * scores, thresholds, sigma, and ML probabilities), and `rawChartData`
+ * (raw sensor columns plus computed flow / pressure-drop). Both chart arrays
+ * are kept as rolling windows trimmed to `maxDataPoints` so memory stays
+ * bounded over long runs.
+ *
+ * Frames are polymorphic: a `type` of "status" or "columns" carries
+ * connection/metadata rather than a sample, and samples themselves are tagged
+ * `status: "calibrating"` while the backend builds its healthy baseline — the
+ * store routes these to status/calibration flags and only emits chart points
+ * for real, post-calibration samples (probabilities/scores stay absent until
+ * then). `updateData` handles one frame; `updateDataBatch` applies a whole
+ * animation-frame batch in a single `set` (the hook's preferred path) by
+ * folding all frames into one merged update to avoid per-message store writes.
+ */
 import { create } from "zustand";
 import type {
 	ChartDataPoint,
@@ -35,6 +56,8 @@ interface SimulationState {
 	clearData: () => void;
 }
 
+// Keep only the most recent `max` elements, preserving the rolling-window
+// invariant for chart buffers.
 function trimToMax<T>(arr: T[], max: number): T[] {
 	if (arr.length <= max) return arr;
 	return arr.slice(arr.length - max);
@@ -52,6 +75,9 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
 	selectedColumns: [],
 	models: [],
 
+	// Single-frame path. Charts in this app are driven via updateDataBatch;
+	// this variant applies one SimulationData frame at a time with the same
+	// status/columns/calibration routing.
 	updateData: (data: SimulationData) => {
 		const state = get();
 
@@ -79,7 +105,9 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
 			return;
 		}
 
-		// Handle calibration progress - check if this data point is from calibration phase
+		// Handle calibration progress - check if this data point is from calibration phase.
+		// While calibrating, surface a percent in `status` and hold the flag set;
+		// the first non-calibration sample clears it (detection results are valid from there on).
 		const isDataFromCalibration = data.status === "calibrating";
 		if (isDataFromCalibration && data.calibration_progress) {
 			set({
@@ -188,10 +216,16 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
 		}
 	},
 
+	// Batched path (the one the WebSocket hook actually calls). Folds an entire
+	// animation-frame's worth of frames into local accumulators, then commits a
+	// single `set` — one re-render per frame regardless of how many samples
+	// arrived. Mirrors updateData's per-frame routing exactly.
 	updateDataBatch: (batch: SimulationData[]) => {
 		if (batch.length === 0) return;
 		const state = get();
 
+		// Accumulators seeded from current state; only "status"/"columns"/calibration
+		// frames mutate the metadata fields, while real samples append chart points.
 		let nextStatus = state.status;
 		let nextCalibrationProgress = state.calibrationProgress;
 		let nextIsCalibrating = state.isCalibrating;
@@ -279,6 +313,9 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
 				(isFromCalibration ? "Calibrating..." : "Running");
 		}
 
+		// Append the batch's new points in one shot, then trim to the rolling
+		// window. Reuse the existing array reference when nothing was appended
+		// to avoid a needless re-render of chart consumers.
 		const max = state.maxDataPoints;
 		const mergedChart =
 			appendedChart.length === 0
@@ -325,6 +362,8 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
 		set({ selectedColumns: columns });
 	},
 
+	// Reset all streamed state for a fresh run (called before starting a new
+	// simulation); leaves loaded `models` untouched.
 	clearData: () => {
 		set({
 			currentData: null,

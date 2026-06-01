@@ -262,11 +262,21 @@ def fig3_threshold(detector, out_path):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _smooth(arr, window_pts):
-    """Simple centred moving average, same as sigma_sweep smoothing."""
+    """Centred rolling median, matching sigma_sweep's composite-crossing smoothing.
+
+    sigma_sweep derives the composite crossing from a rolling *median* over the
+    smoothing window (sigma_sweep.SMOOTHING_WINDOW_SEC), so the figure must use the
+    same statistic for its first-crossing time to agree with the results tables.
+    """
+    arr = np.asarray(arr, dtype=float)
     if window_pts < 2:
         return arr.copy()
-    kernel = np.ones(window_pts) / window_pts
-    return np.convolve(arr, kernel, mode="same")
+    # Trailing (causal) window: the real-time UI and sigma_sweep can only see past
+    # samples, so a trailing median is what determines the reported crossing time.
+    out = np.empty_like(arr)
+    for i in range(arr.size):
+        out[i] = np.median(arr[max(0, i - window_pts + 1): i + 1])
+    return out
 
 
 def fig4_results_panel(filepath, sigma, out_path,
@@ -336,6 +346,7 @@ def fig4_results_panel(filepath, sigma, out_path,
     ax.axhline(comp_thresh, color=ORANGE, lw=1.8, linestyle="--",
                label=fr"Threshold $\tau_{{\sigma}}={comp_thresh:.4f}$")
     ax.set_ylabel(r"$d_m$")
+    ax.set_yscale("log")  # reveal the sustained above-threshold elevation a linear axis hides
     ax.legend(frameon=False, fontsize=9, loc="upper left")
 
     # ── Panel 3: static score ──────────────────────────────────────────────

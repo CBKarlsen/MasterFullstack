@@ -1,4 +1,21 @@
 # dataloader.py
+"""
+Reads sensor recordings (CSV/Excel) and turns them into a stream of samples.
+
+A single :class:`DataStreamer` can point at one file or a whole folder of files.
+For each file it:
+  * loads everything as strings first, so messy real-world data never crashes
+    the parser (European decimal commas, stray text, ghost columns, etc.);
+  * auto-detects the sampling rate from the timestamp column (defaults to 20 Hz
+    when no usable time column exists);
+  * exposes every numeric column for the UI to plot, while also mapping the few
+    "known" columns (flow, inlet/outlet pressure) to fixed keys for the detector.
+
+``stream()`` yields one dict per row, with a monotonically increasing ``time``
+that continues across files in a folder so multi-file recordings stitch into a
+single continuous timeline.
+"""
+
 import pandas as pd
 import os
 import numpy as np
@@ -78,6 +95,13 @@ class DataStreamer:
         return columns
 
     def stream(self) -> Generator[Dict[str, Any], None, None]:
+        """Yield one sample dict per row across all resolved files.
+
+        Each yielded dict has: ``time`` (seconds, continuous across files),
+        ``flow``/``p_in``/``p_out`` (mapped known columns, 0.0 if absent),
+        ``raw`` (every numeric column for this row), and ``columns`` (the list
+        of numeric column names). Unreadable files are skipped, not fatal.
+        """
         files_to_read = []
 
         # 1. Resolve Files
@@ -111,7 +135,10 @@ class DataStreamer:
                 continue
 
             try:
-                # Helper to clean numbers — also guards against NaN/Inf
+                # Parse one cell into a float: accepts European decimal commas
+                # ("1,5" -> 1.5) and coerces anything unparseable or non-finite
+                # (NaN/Inf, blank cells, text) to 0.0 so a bad cell can't crash
+                # the stream.
                 def to_float(x):
                     if isinstance(x, (int, float)):
                         v = float(x)
@@ -279,6 +306,12 @@ class DataStreamer:
         return None
 
     def get_column_data(self, df, aliases, optional=False):
+        """Return the first column whose name matches one of ``aliases``.
+
+        Returns the pandas Series for the first alias present in ``df``. If none
+        match: returns ``None`` when ``optional`` is True, otherwise raises
+        ``KeyError`` (used for columns the caller treats as required).
+        """
         for name in aliases:
             if name in df.columns:
                 return df[name]
